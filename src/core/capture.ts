@@ -19,7 +19,7 @@ export class CaptureError extends Error {
 }
 
 export interface ScriptInjection {
-  target: { tabId: number; frameIds: number[] } | { tabId: number; allFrames: true };
+  target: { tabId: number } | { tabId: number; frameIds: number[] };
   files: string[];
 }
 
@@ -53,7 +53,7 @@ export class CaptureService {
     let rawResults: ScriptInjectionResult[];
     try {
       rawResults = await this.dependencies.executeScript({
-        target: frameId === undefined ? { tabId, allFrames: true } : { tabId, frameIds: [frameId] },
+        target: frameId === undefined ? { tabId } : { tabId, frameIds: [frameId] },
         files: ['/content-scripts/capture.js'],
       });
     } catch (error) {

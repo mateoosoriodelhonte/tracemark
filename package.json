@@ -34,6 +34,8 @@
   "devDependencies": {
     "@eslint/js": "10.0.1",
     "@sveltejs/vite-plugin-svelte": "7.3.0",
+    "@testing-library/jest-dom": "7.0.1",
+    "@testing-library/svelte": "5.4.2",
     "@tsconfig/svelte": "5.0.8",
     "@types/jsdom": "30.0.0",
     "@wxt-dev/module-svelte": "2.0.5",

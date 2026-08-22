@@ -24,16 +24,13 @@ describe('CaptureService', () => {
     });
   });
 
-  test('checks every frame when the initiating gesture has no frame identifier', async () => {
-    const executeScript = vi.fn().mockResolvedValue([
-      { frameId: 0, result: { status: 'no-selection' } },
-      { frameId: 5, result: captured },
-    ]);
+  test('targets only the top frame when the initiating gesture has no frame identifier', async () => {
+    const executeScript = vi.fn().mockResolvedValue([{ frameId: 0, result: captured }]);
     const service = new CaptureService({ executeScript, queryActiveTabs: vi.fn() });
 
     await expect(service.captureTab(42)).resolves.toEqual(captured.value);
     expect(executeScript).toHaveBeenCalledWith({
-      target: { tabId: 42, allFrames: true },
+      target: { tabId: 42 },
       files: ['/content-scripts/capture.js'],
     });
   });
