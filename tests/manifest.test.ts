@@ -101,7 +101,11 @@ test('Firefox exposes the research library as a native sidebar', () => {
 test.each(['chrome-mv3', 'firefox-mv3'] as const)(
   '%s privileged bundles contain no dynamic code constructors',
   (target) => {
-    for (const file of ['background.js', 'content-scripts/capture.js']) {
+    for (const file of [
+      'background.js',
+      'content-scripts/anchor.js',
+      'content-scripts/capture.js',
+    ]) {
       const code = readFileSync(resolve(process.cwd(), '.output', target, file), 'utf8');
       expect(code).not.toMatch(/\bFunction\s*\(/u);
       expect(code).not.toContain('new Function');
