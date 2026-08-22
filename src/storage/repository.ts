@@ -1,5 +1,5 @@
 import type { Collection, Highlight } from '../domain/models';
-import { CollectionSchema, HighlightSchema } from '../domain/schemas';
+import { CollectionSchema, HighlightSchema, TagSchema } from '../domain/schemas';
 import type { TraceMarkDatabase } from './database';
 
 export class ResearchRepository {
@@ -19,6 +19,22 @@ export class ResearchRepository {
   async listHighlights(): Promise<Highlight[]> {
     const highlights = await this.database.highlights.orderBy('createdAt').reverse().toArray();
     return highlights.map((highlight) => HighlightSchema.parse(highlight));
+  }
+
+  async listRecentHighlights(limit: number): Promise<Highlight[]> {
+    const boundedLimit = Math.min(Math.max(Math.trunc(limit), 1), 10);
+    const highlights = await this.database.highlights
+      .orderBy('createdAt')
+      .reverse()
+      .limit(boundedLimit)
+      .toArray();
+    return highlights.map((highlight) => HighlightSchema.parse(highlight));
+  }
+
+  async listTags(limit: number): Promise<string[]> {
+    const boundedLimit = Math.min(Math.max(Math.trunc(limit), 1), 500);
+    const keys = await this.database.highlights.orderBy('tags').limit(boundedLimit).uniqueKeys();
+    return keys.map((key) => TagSchema.parse(key));
   }
 
   async deleteHighlight(id: string): Promise<void> {
