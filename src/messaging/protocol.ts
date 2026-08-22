@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import type { Collection, Highlight } from '../domain/models';
 import {
+  AnchorRuntimeResultSchema,
   CaptureResultSchema,
   CollectionSchema,
   HighlightSchema,
@@ -25,6 +26,7 @@ export const RequestSchema = z.discriminatedUnion('type', [
   CreateHighlightRequestSchema,
   z.object({ type: z.literal('highlights.list') }).strict(),
   z.object({ type: z.literal('collections.list') }).strict(),
+  z.object({ type: z.literal('anchors.apply'), highlightId: IdSchema }).strict(),
 ]);
 
 export const ErrorCodeSchema = z.enum([
@@ -35,6 +37,9 @@ export const ErrorCodeSchema = z.enum([
   'INVALID_CAPTURE',
   'MULTIPLE_SELECTIONS',
   'NO_ACTIVE_TAB',
+  'WRONG_PAGE',
+  'INVALID_ANCHOR_RESULT',
+  'NOT_FOUND',
   'INTERNAL_ERROR',
 ]);
 
@@ -47,6 +52,7 @@ export const ResponseSchema = z.discriminatedUnion('ok', [
         HighlightSchema,
         z.array(HighlightSchema),
         z.array(CollectionSchema),
+        AnchorRuntimeResultSchema,
       ]),
     })
     .strict(),
@@ -62,4 +68,8 @@ export const ResponseSchema = z.discriminatedUnion('ok', [
 export type MessageRequest = z.infer<typeof RequestSchema>;
 export type MessageResponse = z.infer<typeof ResponseSchema>;
 export type SuccessfulResponseData =
-  Highlight | Highlight[] | Collection[] | z.infer<typeof CaptureResultSchema>;
+  | Highlight
+  | Highlight[]
+  | Collection[]
+  | z.infer<typeof CaptureResultSchema>
+  | z.infer<typeof AnchorRuntimeResultSchema>;

@@ -108,3 +108,27 @@ export const CapturePageResultSchema = z.discriminatedUnion('status', [
   z.object({ status: z.literal('unsupported') }).strict(),
   z.object({ status: z.literal('invalid-selection') }).strict(),
 ]);
+
+export const TextQuoteSelectorSchema = z
+  .object({
+    exact: NonBlankString(MAX_QUOTE_LENGTH),
+    prefix: z.string().max(MAX_CONTEXT_LENGTH),
+    suffix: z.string().max(MAX_CONTEXT_LENGTH),
+  })
+  .strict();
+
+export const AnchorCommandSchema = z
+  .object({
+    type: z.literal('tracemark.anchor.apply'),
+    selector: TextQuoteSelectorSchema,
+  })
+  .strict();
+
+export const AnchorReadyResultSchema = z.object({ status: z.literal('ready') }).strict();
+
+export const AnchorRuntimeResultSchema = z.discriminatedUnion('status', [
+  z.object({ status: z.literal('marked'), count: z.number().int().min(1).max(500) }).strict(),
+  z.object({ status: z.literal('ambiguous') }).strict(),
+  z.object({ status: z.literal('not-found') }).strict(),
+  z.object({ status: z.literal('unsupported') }).strict(),
+]);

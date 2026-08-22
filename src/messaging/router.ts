@@ -1,4 +1,6 @@
 import type { Collection, Highlight } from '../domain/models';
+import { AnchorError } from '../core/anchor';
+import type { AnchorService } from '../core/anchor';
 import { CaptureError } from '../core/capture';
 import type { CaptureService } from '../core/capture';
 import type { CreateHighlightInput } from '../core/highlights';
@@ -13,9 +15,11 @@ export interface RouterServices {
   capture: Pick<CaptureService, 'captureActiveTab'>;
   highlights: {
     create(input: CreateHighlightInput): Promise<Highlight>;
+    get(id: string): Promise<Highlight | undefined>;
     list(): Promise<Highlight[]>;
   };
   collections: Pick<CollectionService, 'list'> | { list(): Promise<Collection[]> };
+  anchors: Pick<AnchorService, 'apply'>;
 }
 
 type ErrorCode = Extract<MessageResponse, { ok: false }>['code'];
@@ -49,9 +53,17 @@ export function createMessageRouter(services: RouterServices, runtimeId: string)
           return ResponseSchema.parse({ ok: true, data: await services.highlights.list() });
         case 'collections.list':
           return ResponseSchema.parse({ ok: true, data: await services.collections.list() });
+        case 'anchors.apply': {
+          const highlight = await services.highlights.get(request.data.highlightId);
+          if (highlight === undefined) {
+            return errorResponse('NOT_FOUND', 'The saved highlight does not exist');
+          }
+          return ResponseSchema.parse({ ok: true, data: await services.anchors.apply(highlight) });
+        }
       }
     } catch (error) {
       if (error instanceof CaptureError) return errorResponse(error.code, error.message);
+      if (error instanceof AnchorError) return errorResponse(error.code, error.message);
       return errorResponse('INTERNAL_ERROR', 'TraceMark could not complete the request');
     }
   };

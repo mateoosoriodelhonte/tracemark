@@ -46,6 +46,8 @@ function popupRequest(options: { captureError?: boolean } = {}) {
         };
       case 'highlights.list':
         return { ok: true, data: [] };
+      case 'anchors.apply':
+        return { ok: true, data: { status: 'not-found' } };
     }
   });
 }

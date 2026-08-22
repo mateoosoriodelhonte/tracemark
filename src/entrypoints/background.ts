@@ -1,4 +1,5 @@
 import { CollectionService } from '../core/collections';
+import { AnchorService } from '../core/anchor';
 import { createBackgroundHandlers, CAPTURE_MENU_ID } from '../core/background-controller';
 import { CaptureService, createCaptureActions } from '../core/capture';
 import { HighlightService } from '../core/highlights';
@@ -23,8 +24,21 @@ async function createServices() {
     },
     queryActiveTabs: async () => browser.tabs.query({ active: true, currentWindow: true }),
   });
+  const anchors = new AnchorService({
+    executeScript: async ({ target, files }) => {
+      const [file] = files;
+      if (file !== '/content-scripts/anchor.js') throw new Error('Anchor script is invalid');
+      return browser.scripting.executeScript({ target, files: ['/content-scripts/anchor.js'] });
+    },
+    queryActiveTabs: async () => browser.tabs.query({ active: true, currentWindow: true }),
+    sendMessage: async (tabId, message, options) =>
+      browser.tabs.sendMessage(tabId, message, options),
+  });
   const captureActions = createCaptureActions(capture, highlights);
-  const router = createMessageRouter({ capture, highlights, collections }, browser.runtime.id);
+  const router = createMessageRouter(
+    { capture, highlights, collections, anchors },
+    browser.runtime.id,
+  );
 
   return { captureActions, router };
 }
