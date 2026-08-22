@@ -53,4 +53,23 @@ describe('ResearchRepository', () => {
       '6f3f6066-69e2-48c0-9d55-f273a22a830e',
     ]);
   });
+
+  test('returns bounded recent highlights and a bounded distinct tag projection', async () => {
+    const repository = await createRepository();
+    await repository.putCollection(makeCollection());
+    await repository.putHighlight(makeHighlight());
+    await repository.putHighlight(
+      makeHighlight({
+        id: '95a521e9-0c6a-4a25-81a0-57b43ab704ac',
+        tags: ['evidence', 'retrieval'],
+        createdAt: '2026-08-23T06:00:00.000Z',
+        updatedAt: '2026-08-23T06:00:00.000Z',
+      }),
+    );
+
+    expect((await repository.listRecentHighlights(1)).map(({ id }) => id)).toEqual([
+      '95a521e9-0c6a-4a25-81a0-57b43ab704ac',
+    ]);
+    expect(await repository.listTags(2)).toEqual(['evidence', 'rag']);
+  });
 });

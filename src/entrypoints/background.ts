@@ -1,11 +1,14 @@
 import { CollectionService } from '../core/collections';
 import { AnchorService } from '../core/anchor';
+import { BackupService } from '../core/backups';
 import { createBackgroundHandlers, CAPTURE_MENU_ID } from '../core/background-controller';
 import { CaptureService, createCaptureActions } from '../core/capture';
 import { HighlightService } from '../core/highlights';
+import { SearchService } from '../core/search';
 import { createMessageRouter } from '../messaging/router';
 import { openTraceMarkDatabase } from '../storage/database';
 import { ResearchRepository } from '../storage/repository';
+import { PreferencesStore } from '../storage/preferences';
 
 async function createServices() {
   const database = await openTraceMarkDatabase();
@@ -16,6 +19,9 @@ async function createServices() {
   };
   const highlights = new HighlightService(repository, dependencies);
   const collections = new CollectionService(repository, dependencies);
+  const search = new SearchService(repository);
+  const preferences = new PreferencesStore(browser.storage.local);
+  const backups = new BackupService(repository, preferences, dependencies);
   const capture = new CaptureService({
     executeScript: async ({ target, files }) => {
       const [file] = files;
@@ -36,7 +42,7 @@ async function createServices() {
   });
   const captureActions = createCaptureActions(capture, highlights);
   const router = createMessageRouter(
-    { capture, highlights, collections, anchors },
+    { capture, highlights, collections, anchors, search, preferences, backups },
     browser.runtime.id,
   );
 

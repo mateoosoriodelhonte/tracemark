@@ -132,3 +132,44 @@ export const AnchorRuntimeResultSchema = z.discriminatedUnion('status', [
   z.object({ status: z.literal('not-found') }).strict(),
   z.object({ status: z.literal('unsupported') }).strict(),
 ]);
+
+export const BackupEnvelopeSchema = z
+  .object({
+    format: z.literal('tracemark-backup'),
+    version: z.literal(1),
+    exportedAt: TimestampSchema,
+    collections: z.array(CollectionSchema).max(10_000),
+    highlights: z.array(HighlightSchema).max(100_000),
+    aiResults: z.array(AIResultSchema).max(100_000),
+    settings: SettingsSchema,
+  })
+  .strict();
+
+export const BackupExportSchema = z
+  .object({
+    format: z.enum(['json', 'markdown']),
+    filename: z.string().min(1).max(240),
+    content: z.string().max(20_000_000),
+  })
+  .strict();
+
+export const BackupEntityCountsSchema = z
+  .object({
+    collections: z.number().int().min(0).max(10_000),
+    highlights: z.number().int().min(0).max(100_000),
+    aiResults: z.number().int().min(0).max(100_000),
+  })
+  .strict();
+
+export const BackupImportResultSchema = z
+  .object({
+    collections: z.number().int().min(1).max(10_000),
+    highlights: z.number().int().min(0).max(100_000),
+    aiResults: z.number().int().min(0).max(100_000),
+    created: BackupEntityCountsSchema,
+    updated: BackupEntityCountsSchema,
+    skipped: BackupEntityCountsSchema,
+    regenerated: BackupEntityCountsSchema,
+    rejected: BackupEntityCountsSchema,
+  })
+  .strict();

@@ -115,7 +115,11 @@ export class HighlightService {
     return this.repository.getHighlight(id);
   }
 
-  async list(): Promise<Highlight[]> {
-    return this.repository.listHighlights();
+  async recent(limit: number): Promise<Highlight[]> {
+    return this.repository.listRecentHighlights(limit);
+  }
+
+  async tags(limit: number): Promise<string[]> {
+    return this.repository.listTags(limit);
   }
 }

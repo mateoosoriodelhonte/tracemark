@@ -15,7 +15,13 @@ const capture = {
   url: 'https://example.com/article',
 };
 
-function popupRequest(options: { captureError?: boolean } = {}) {
+function popupRequest(
+  options: {
+    captureError?: boolean;
+    theme?: 'system' | 'light' | 'dark';
+    recent?: ReturnType<typeof makeHighlight>[];
+  } = {},
+) {
   return vi.fn(async (request: MessageRequest): Promise<MessageResponse> => {
     switch (request.type) {
       case 'capture.current':
@@ -33,6 +39,16 @@ function popupRequest(options: { captureError?: boolean } = {}) {
             }),
           ],
         };
+      case 'settings.get':
+        return {
+          ok: true,
+          data: {
+            id: 'settings',
+            schemaVersion: 1,
+            theme: options.theme ?? 'system',
+            ai: { provider: 'none', model: 'llama3.2' },
+          },
+        };
       case 'highlights.create':
         return {
           ok: true,
@@ -44,11 +60,12 @@ function popupRequest(options: { captureError?: boolean } = {}) {
             searchTokens: ['exact', 'quote', 'from', 'the', 'page'],
           }),
         };
-      case 'highlights.list':
-        return { ok: true, data: [] };
+      case 'highlights.recent':
+        return { ok: true, data: options.recent ?? [] };
       case 'anchors.apply':
         return { ok: true, data: { status: 'not-found' } };
     }
+    throw new Error(`Unexpected popup request: ${request.type}`);
   });
 }
 
@@ -81,11 +98,24 @@ describe('popup capture flow', () => {
   });
 
   test('shows a useful empty-selection state and keeps save disabled', async () => {
-    render(App, { props: { request: popupRequest({ captureError: true }) } });
+    const recent = makeHighlight({ title: 'Recent research' });
+    render(App, { props: { request: popupRequest({ captureError: true, recent: [recent] }) } });
 
     expect(await screen.findByRole('alert')).toHaveTextContent(
       'Select text on the page before saving',
     );
     expect(screen.getByRole('button', { name: 'Save quotation' })).toBeDisabled();
+    expect(screen.getByText('Recent research')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Open research library' })).toHaveAttribute(
+      'href',
+      '/sidepanel.html',
+    );
+  });
+
+  test('uses the stored theme preference', async () => {
+    const { container } = render(App, { props: { request: popupRequest({ theme: 'dark' }) } });
+
+    expect(await screen.findByText(capture.quote)).toBeInTheDocument();
+    expect(container.querySelector('main[data-theme="dark"]')).not.toBeNull();
   });
 });
