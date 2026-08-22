@@ -103,4 +103,32 @@ describe('SearchService', () => {
       'Example Article',
     ]);
   });
+
+  test('post-filters long identifiers that share the same indexed prefix', async () => {
+    const sharedPrefix = 'x'.repeat(256);
+    const wantedIdentifier = `${sharedPrefix}${'a'.repeat(244)}`;
+    const otherIdentifier = `${sharedPrefix}${'b'.repeat(244)}`;
+    const indexedPrefix = sharedPrefix;
+
+    await repository.putHighlight(
+      makeHighlight({
+        id: '0e567f4f-22cf-4630-87cb-6cf94fe7eb3d',
+        quote: wantedIdentifier,
+        searchText: wantedIdentifier,
+        searchTokens: [indexedPrefix],
+      }),
+    );
+    await repository.putHighlight(
+      makeHighlight({
+        id: '3a80e81a-4b11-464c-a329-a6ae7498a61d',
+        quote: otherIdentifier,
+        searchText: otherIdentifier,
+        searchTokens: [indexedPrefix],
+      }),
+    );
+
+    expect((await search.run({ query: wantedIdentifier })).map(({ quote }) => quote)).toEqual([
+      wantedIdentifier,
+    ]);
+  });
 });

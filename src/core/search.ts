@@ -1,6 +1,7 @@
 import type { Highlight } from '../domain/models';
 import { normalizeTags } from '../domain/tags';
-import { normalizeSearchText, tokenizeSearch } from '../domain/text';
+import { MAX_SEARCH_TOKEN_LENGTH } from '../domain/constants';
+import { normalizeSearchText, tokenizeSearchText } from '../domain/text';
 import type { ResearchRepository } from '../storage/repository';
 
 export interface SearchQuery {
@@ -16,8 +17,8 @@ export class SearchService {
 
   async run(input: SearchQuery): Promise<Highlight[]> {
     const query = normalizeSearchText(input.query);
-    const tokens = tokenizeSearch(query);
-    const [firstToken] = tokens;
+    const queryTokens = tokenizeSearchText(query);
+    const firstToken = queryTokens[0]?.slice(0, MAX_SEARCH_TOKEN_LENGTH);
     const normalizedTag = input.tag === undefined ? undefined : normalizeTags([input.tag])[0];
     const collections = await this.repository.listCollections();
     const visibleCollectionIds = new Set(
@@ -40,7 +41,8 @@ export class SearchService {
         return false;
       }
       if (normalizedTag !== undefined && !highlight.tags.includes(normalizedTag)) return false;
-      return tokens.every((token) => highlight.searchTokens.includes(token));
+      const sourceTokens = new Set(tokenizeSearchText(highlight.searchText));
+      return queryTokens.every((token) => sourceTokens.has(token));
     });
 
     const ranked = filtered

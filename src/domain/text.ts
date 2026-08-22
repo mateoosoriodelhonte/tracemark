@@ -15,8 +15,14 @@ export function normalizeSearchText(value: string): string {
     .trim();
 }
 
-export function tokenizeSearch(value: string): string[] {
+export function tokenizeSearchText(value: string): string[] {
   const normalized = normalizeSearchText(value);
   const tokens = normalized.match(/[\p{L}\p{N}]+(?:-[\p{L}\p{N}]+)*/gu) ?? [];
-  return [...new Set(tokens.map((token) => token.slice(0, MAX_SEARCH_TOKEN_LENGTH)))];
+  return [...new Set(tokens)];
+}
+
+export function tokenizeSearch(value: string): string[] {
+  return [
+    ...new Set(tokenizeSearchText(value).map((token) => token.slice(0, MAX_SEARCH_TOKEN_LENGTH))),
+  ];
 }

@@ -143,4 +143,27 @@ describe('TraceMark database migrations', () => {
 
     expect(await readLegacyCollections(name)).toEqual([malformedCollection]);
   });
+
+  test.each([
+    [
+      'normalized duplicate names',
+      [
+        { id: '47517b16-f6ca-41e6-999d-4d730313266a', name: 'Research' },
+        { id: 'd5b9ea48-6041-4440-b0c1-f49611f8e658', name: ' research ' },
+      ],
+    ],
+    [
+      'a collection that reserves the Inbox name',
+      [{ id: '47517b16-f6ca-41e6-999d-4d730313266a', name: 'Inbox' }],
+    ],
+  ])('aborts %s without modifying legacy collections', async (_scenario, legacyCollections) => {
+    const name = trackDatabase();
+    await createLegacyDatabase(name, [], legacyCollections);
+
+    const database = new TraceMarkDatabase(name, { now: () => fixedNow });
+    await expect(database.open()).rejects.toThrow('Conflicting legacy collection names');
+    database.close();
+
+    expect(await readLegacyCollections(name)).toEqual(legacyCollections);
+  });
 });

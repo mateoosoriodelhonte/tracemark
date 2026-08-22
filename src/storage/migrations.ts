@@ -162,6 +162,20 @@ export function migrateLegacyCollection(
   }
 }
 
+function assertUniqueCollectionNames(collections: Collection[]): void {
+  const normalizedNames = new Set<string>();
+
+  for (const collection of collections) {
+    if (
+      (collection.normalizedName === 'inbox' && collection.id !== INBOX_COLLECTION_ID) ||
+      normalizedNames.has(collection.normalizedName)
+    ) {
+      throw new MigrationError('Conflicting legacy collection names');
+    }
+    normalizedNames.add(collection.normalizedName);
+  }
+}
+
 export async function migrateVersionOne(
   transaction: Transaction,
   dependencies: MigrationDependencies,
@@ -175,6 +189,7 @@ export async function migrateVersionOne(
   const migratedCollections = legacyCollections.map((collection) =>
     migrateLegacyCollection(collection, dependencies),
   );
+  assertUniqueCollectionNames(migratedCollections);
   const collectionNames = new Map<string, string>([
     [INBOX_COLLECTION_ID, 'Inbox'],
     ...migratedCollections.map((collection) => [collection.id, collection.name] as const),
