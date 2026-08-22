@@ -80,6 +80,24 @@ describe('HighlightService', () => {
     ).rejects.toThrow('Unsupported source URL');
   });
 
+  test('stores quotations containing long identifiers without creating oversized index keys', async () => {
+    const longIdentifier = 'x'.repeat(500);
+
+    const highlight = await service.create({
+      quote: `Identifier ${longIdentifier} is part of the source.`,
+      prefix: '',
+      suffix: '',
+      title: 'Long identifiers',
+      url: 'https://example.com/article',
+      collectionId: INBOX_COLLECTION_ID,
+      tags: [],
+      note: '',
+    });
+
+    expect(highlight.quote).toContain(longIdentifier);
+    expect(Math.max(...highlight.searchTokens.map((token) => token.length))).toBe(256);
+  });
+
   test('updates notes, tags, and collection-derived search fields', async () => {
     await repository.putCollection(makeCollection());
     await service.create({

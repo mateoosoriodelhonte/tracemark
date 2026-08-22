@@ -76,7 +76,7 @@ Run `pnpm vitest run tests/manifest.test.ts`. Expected: failure because browser 
 
 - [ ] **Step 4: Configure browser-aware MV3 manifests and build**
 
-Set the name, description, icons, command `save-selection` with `Alt+Shift+S`, required permissions, optional Ollama host, `browser_specific_settings.gecko.id: tracemark@mateoosoriodelhonte.github.io`, and `strict_min_version: 109.0`. Use WXT's side-panel entrypoint mapping and never add static content-script matches.
+Set the name, description, icons, command `save-selection` with `Alt+Shift+S`, required permissions, optional Ollama host, `browser_specific_settings.gecko.id: tracemark@mateoosoriodelhonte.github.io`, and `strict_min_version: 142.0` so Firefox supports the built-in data consent declaration. Use WXT's side-panel entrypoint mapping and never add static content-script matches.
 
 - [ ] **Step 5: Verify both builds and contract tests**
 

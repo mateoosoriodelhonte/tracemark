@@ -7,5 +7,6 @@ export const MAX_NOTE_LENGTH = 10_000;
 export const MAX_TAG_LENGTH = 40;
 export const MAX_TAGS = 20;
 export const MAX_SEARCH_TEXT_LENGTH = 50_000;
+export const MAX_SEARCH_TOKEN_LENGTH = 256;
 
 export const INBOX_COLLECTION_ID = '00000000-0000-4000-8000-000000000001';

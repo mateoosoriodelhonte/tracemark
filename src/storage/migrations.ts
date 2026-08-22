@@ -7,10 +7,11 @@ import {
   MAX_TAG_LENGTH,
   MAX_TITLE_LENGTH,
 } from '../domain/constants';
-import type { Highlight } from '../domain/models';
-import { HighlightSchema, IdSchema, TimestampSchema } from '../domain/schemas';
+import type { Collection, Highlight } from '../domain/models';
+import { CollectionSchema, HighlightSchema, IdSchema, TimestampSchema } from '../domain/schemas';
 import { buildSearchDocument } from '../domain/search-document';
 import { normalizeTags } from '../domain/tags';
+import { normalizeSearchText, normalizeWhitespace } from '../domain/text';
 import { safeSourceUrl } from '../domain/urls';
 
 export interface MigrationDependencies {
@@ -58,6 +59,7 @@ function legacyTags(record: Record<string, unknown>): string[] {
 export function migrateLegacyHighlight(
   input: unknown,
   dependencies: MigrationDependencies,
+  collectionNames: ReadonlyMap<string, string> = new Map(),
 ): Highlight {
   try {
     if (!isRecord(input)) throw new MigrationError('Legacy highlight is not an object');
@@ -79,12 +81,16 @@ export function migrateLegacyHighlight(
     const createdAt = TimestampSchema.safeParse(rawCreatedAt).success
       ? (rawCreatedAt as string)
       : dependencies.now();
-    const collectionId = IdSchema.safeParse(input.collectionId).success
+    const requestedCollectionId = IdSchema.safeParse(input.collectionId).success
       ? (input.collectionId as string)
       : INBOX_COLLECTION_ID;
+    const collectionId = collectionNames.has(requestedCollectionId)
+      ? requestedCollectionId
+      : INBOX_COLLECTION_ID;
+    const collectionName = collectionNames.get(collectionId) ?? 'Inbox';
     const note = optionalBoundedString(input, 'note', MAX_NOTE_LENGTH) ?? '';
     const tags = legacyTags(input);
-    const search = buildSearchDocument({ quote, title, hostname, note, tags }, 'Inbox');
+    const search = buildSearchDocument({ quote, title, hostname, note, tags }, collectionName);
 
     return HighlightSchema.parse({
       id,
@@ -110,16 +116,74 @@ export function migrateLegacyHighlight(
   }
 }
 
+export function migrateLegacyCollection(
+  input: unknown,
+  dependencies: MigrationDependencies,
+): Collection {
+  try {
+    if (!isRecord(input)) throw new MigrationError('Legacy collection is not an object');
+
+    const id = IdSchema.parse(input.id);
+    if (id === INBOX_COLLECTION_ID) {
+      const now = dependencies.now();
+      return CollectionSchema.parse({
+        id,
+        schemaVersion: CURRENT_SCHEMA_VERSION,
+        name: 'Inbox',
+        normalizedName: 'inbox',
+        status: 'active',
+        createdAt: now,
+        updatedAt: now,
+      });
+    }
+
+    if (typeof input.name !== 'string') throw new MigrationError('Invalid legacy collection name');
+    const name = normalizeWhitespace(input.name);
+    if (name.length === 0 || name.length > 120) {
+      throw new MigrationError('Invalid legacy collection name');
+    }
+
+    const rawCreatedAt = input.createdAt;
+    const createdAt = TimestampSchema.safeParse(rawCreatedAt).success
+      ? (rawCreatedAt as string)
+      : dependencies.now();
+
+    return CollectionSchema.parse({
+      id,
+      schemaVersion: CURRENT_SCHEMA_VERSION,
+      name,
+      normalizedName: normalizeSearchText(name),
+      status: input.archived === true ? 'archived' : 'active',
+      createdAt,
+      updatedAt: createdAt,
+    });
+  } catch (error) {
+    throw new MigrationError('Cannot migrate legacy collection', { cause: error });
+  }
+}
+
 export async function migrateVersionOne(
   transaction: Transaction,
   dependencies: MigrationDependencies,
 ): Promise<void> {
-  const table = transaction.table('highlights');
-  const legacyHighlights = await table.toArray();
+  const highlightsTable = transaction.table('highlights');
+  const collectionsTable = transaction.table('collections');
+  const [legacyHighlights, legacyCollections] = await Promise.all([
+    highlightsTable.toArray(),
+    collectionsTable.toArray(),
+  ]);
+  const migratedCollections = legacyCollections.map((collection) =>
+    migrateLegacyCollection(collection, dependencies),
+  );
+  const collectionNames = new Map<string, string>([
+    [INBOX_COLLECTION_ID, 'Inbox'],
+    ...migratedCollections.map((collection) => [collection.id, collection.name] as const),
+  ]);
   const migratedHighlights = legacyHighlights.map((highlight) =>
-    migrateLegacyHighlight(highlight, dependencies),
+    migrateLegacyHighlight(highlight, dependencies, collectionNames),
   );
 
-  await table.clear();
-  if (migratedHighlights.length > 0) await table.bulkAdd(migratedHighlights);
+  await Promise.all([highlightsTable.clear(), collectionsTable.clear()]);
+  if (migratedCollections.length > 0) await collectionsTable.bulkAdd(migratedCollections);
+  if (migratedHighlights.length > 0) await highlightsTable.bulkAdd(migratedHighlights);
 }

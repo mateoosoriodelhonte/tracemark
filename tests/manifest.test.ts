@@ -37,7 +37,9 @@ describe.each(['chrome-mv3', 'firefox-mv3'] as const)('%s manifest', (target) =>
     expect(manifest.manifest_version).toBe(3);
     expect(manifest.name).toBe('TraceMark');
     expect(manifest.permissions).toEqual(
-      expect.arrayContaining(['activeTab', 'scripting', 'contextMenus', 'storage']),
+      target === 'chrome-mv3'
+        ? ['activeTab', 'scripting', 'contextMenus', 'storage', 'sidePanel']
+        : ['activeTab', 'scripting', 'contextMenus', 'storage'],
     );
     expect(manifest.host_permissions ?? []).toEqual([]);
     expect(JSON.stringify(manifest)).not.toContain('<all_urls>');
@@ -88,7 +90,7 @@ test('Firefox exposes the research library as a native sidebar', () => {
   expect(manifest.side_panel).toBeUndefined();
   expect(manifest.browser_specific_settings?.gecko).toEqual({
     id: 'tracemark@mateoosoriodelhonte.github.io',
-    strict_min_version: '109.0',
+    strict_min_version: '142.0',
     data_collection_permissions: {
       required: ['none'],
       optional: ['websiteContent'],

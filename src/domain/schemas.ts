@@ -5,6 +5,7 @@ import {
   MAX_NOTE_LENGTH,
   MAX_QUOTE_LENGTH,
   MAX_SEARCH_TEXT_LENGTH,
+  MAX_SEARCH_TOKEN_LENGTH,
   MAX_TAG_LENGTH,
   MAX_TAGS,
   MAX_TITLE_LENGTH,
@@ -42,7 +43,7 @@ export const HighlightSchema = z
     tags: z.array(TagSchema).max(MAX_TAGS),
     note: z.string().max(MAX_NOTE_LENGTH),
     searchText: z.string().max(MAX_SEARCH_TEXT_LENGTH),
-    searchTokens: z.array(NonBlankString(MAX_TAG_LENGTH)).max(10_000),
+    searchTokens: z.array(NonBlankString(MAX_SEARCH_TOKEN_LENGTH)).max(10_000),
     createdAt: TimestampSchema,
     updatedAt: TimestampSchema,
   })

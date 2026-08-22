@@ -23,6 +23,8 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "check:manifests": "vitest run tests/manifest.test.ts",
+    "lint:firefox": "web-ext lint --source-dir .output/firefox-mv3 --output text",
+    "check": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm build:chrome && pnpm build:firefox && pnpm test && pnpm lint:firefox",
     "postinstall": "wxt prepare"
   },
   "dependencies": {
