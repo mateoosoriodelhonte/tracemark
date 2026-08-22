@@ -1,0 +1,9 @@
+node_modules/
+.output/
+.wxt/
+coverage/
+test-results/
+playwright-report/
+*.log
+.DS_Store
+web-ext-artifacts/

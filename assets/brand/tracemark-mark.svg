@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-labelledby="title desc">
+  <title id="title">TraceMark</title>
+  <desc id="desc">A warm bookmark with paired quotation marks on a deep teal field.</desc>
+  <rect width="256" height="256" rx="56" fill="#123f3b"/>
+  <path d="M63 43c0-12.2 9.8-22 22-22h86c12.2 0 22 9.8 22 22v178l-65-40-65 40V43Z" fill="#f7f0df"/>
+  <path d="M89 78c0-8.3 6.7-15 15-15h17v30h-14v22H83V93c0-5.5 2.2-10.8 6-15Zm52 0c0-8.3 6.7-15 15-15h17v30h-14v22h-24V93c0-5.5 2.2-10.8 6-15Z" fill="#13756b"/>
+  <path d="M88 145h80" fill="none" stroke="#d4a85f" stroke-linecap="round" stroke-width="12"/>
+</svg>

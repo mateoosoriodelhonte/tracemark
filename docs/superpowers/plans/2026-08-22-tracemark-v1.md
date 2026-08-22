@@ -6,7 +6,7 @@
 
 **Architecture:** WXT generates explicit MV3 Chrome and Firefox builds. A background-owned service layer validates typed messages and owns Dexie/IndexedDB; runtime-only scripts capture or anchor the active page after a user gesture; Svelte popup and side-panel clients use the same message API. Lightweight preferences use browser storage and optional Ollama access is permission-gated.
 
-**Tech Stack:** WXT 0.21.4, TypeScript 7.0.2, Svelte 5.56.10, Dexie 4.4.5, Zod 4.4.3, Vitest 4.1.11, Testing Library, fake-indexeddb, Playwright 1.62.1, Selenium/WebDriver, pnpm 11.
+**Tech Stack:** WXT 0.21.4, TypeScript 5.9.3, Svelte 5.56.10, Dexie 4.4.5, Zod 4.4.3, Vitest 4.1.11, Testing Library, fake-indexeddb, Playwright 1.62.1, Selenium/WebDriver, pnpm 11.
 
 **Spec:** `docs/superpowers/specs/2026-08-22-tracemark-v1-design.md`
 
@@ -41,12 +41,14 @@
 ### Task 1: Repository and cross-browser WXT shell
 
 **Files:**
+
 - Create: `package.json`, `pnpm-lock.yaml`, `wxt.config.ts`, `tsconfig.json`, `svelte.config.js`, `vitest.config.ts`, `eslint.config.js`, `.prettierrc.json`, `.gitignore`
 - Create: `entrypoints/background.ts`, `entrypoints/popup/index.html`, `entrypoints/popup/main.ts`, `entrypoints/popup/App.svelte`, `entrypoints/sidepanel/index.html`, `entrypoints/sidepanel/main.ts`, `entrypoints/sidepanel/App.svelte`
 - Create: `public/icon-{16,32,48,96,128}.png`
 - Test: `tests/manifest.test.ts`
 
 **Interfaces:**
+
 - Produces scripts `dev`, `dev:firefox`, `build:chrome`, `build:firefox`, `zip:chrome`, `zip:firefox`, `test`, `typecheck`, `lint`, `format:check`, and `check`.
 - Produces Chrome `.output/chrome-mv3/manifest.json` and Firefox `.output/firefox-mv3/manifest.json`.
 
@@ -57,10 +59,12 @@ Use WXT's Svelte TypeScript template as the baseline, set package version `0.1.0
 - [ ] **Step 2: Write the manifest contract test**
 
 ```ts
-test.each(['chrome-mv3', 'firefox-mv3'])('%s has minimal permissions', target => {
+test.each(['chrome-mv3', 'firefox-mv3'])('%s has minimal permissions', (target) => {
   const manifest = readManifest(target);
   expect(manifest.manifest_version).toBe(3);
-  expect(manifest.permissions).toEqual(expect.arrayContaining(['activeTab', 'scripting', 'contextMenus', 'storage']));
+  expect(manifest.permissions).toEqual(
+    expect.arrayContaining(['activeTab', 'scripting', 'contextMenus', 'storage']),
+  );
   expect(manifest.host_permissions ?? []).toEqual([]);
   expect(JSON.stringify(manifest)).not.toContain('<all_urls>');
 });
@@ -85,10 +89,12 @@ Run `git add . && git commit -m "build: bootstrap WXT Svelte extension"`.
 ### Task 2: Domain schemas and safe normalization
 
 **Files:**
+
 - Create: `src/domain/constants.ts`, `src/domain/models.ts`, `src/domain/schemas.ts`, `src/domain/text.ts`, `src/domain/tags.ts`, `src/domain/urls.ts`, `src/domain/search-document.ts`
 - Test: `tests/unit/text.test.ts`, `tests/unit/tags.test.ts`, `tests/unit/urls.test.ts`, `tests/unit/schemas.test.ts`, `tests/unit/search-document.test.ts`
 
 **Interfaces:**
+
 - Produces `normalizeWhitespace(value: string): string`, `normalizeTags(values: readonly string[]): string[]`, `safeSourceUrl(value: string): string | undefined`, `buildSearchDocument(highlight, collectionName): { searchText: string; searchTokens: string[] }`.
 - Produces strict `HighlightSchema`, `CollectionSchema`, `SettingsSchema`, `CaptureResultSchema`, and versioned export/import schemas.
 
@@ -120,20 +126,29 @@ Run `git add src/domain tests/unit && git commit -m "feat: define safe research 
 ### Task 3: IndexedDB repository, migrations, collections, and search
 
 **Files:**
+
 - Create: `src/storage/database.ts`, `src/storage/migrations.ts`, `src/storage/repository.ts`, `src/storage/preferences.ts`
 - Create: `src/core/highlights.ts`, `src/core/collections.ts`, `src/core/search.ts`
 - Test: `tests/storage/migrations.test.ts`, `tests/storage/repository.test.ts`, `tests/core/collections.test.ts`, `tests/core/search.test.ts`
 
 **Interfaces:**
+
 - Produces `TraceMarkDatabase`, `ResearchRepository`, `HighlightService`, `CollectionService`, `SearchService`, and `PreferencesStore`.
 - `ResearchRepository.transaction()` makes highlight/collection imports and delete-to-Inbox operations atomic.
 
 - [ ] **Step 1: Write a failing legacy migration test with real fake IndexedDB**
 
 ```ts
-const legacy = await createLegacyDatabase([{ id: 'old-1', text: ' Exact quote ', sourceUrl: 'https://example.com/a' }]);
+const legacy = await createLegacyDatabase([
+  { id: 'old-1', text: ' Exact quote ', sourceUrl: 'https://example.com/a' },
+]);
 const current = await openCurrentDatabase(legacy.name);
-expect(await current.highlights.get('old-1')).toMatchObject({ quote: ' Exact quote ', schemaVersion: 1, tags: [], note: '' });
+expect(await current.highlights.get('old-1')).toMatchObject({
+  quote: ' Exact quote ',
+  schemaVersion: 1,
+  tags: [],
+  note: '',
+});
 ```
 
 - [ ] **Step 2: Verify red**
@@ -163,20 +178,28 @@ Run `git add src/storage src/core tests/storage tests/core && git commit -m "fea
 ### Task 4: Typed messaging and deliberate selection capture
 
 **Files:**
+
 - Create: `src/messaging/protocol.ts`, `src/messaging/router.ts`, `src/messaging/client.ts`, `src/core/capture.ts`, `src/domain/capture-selection.ts`
 - Modify: `entrypoints/background.ts`
 - Create: `entrypoints/capture.content.ts`
 - Test: `tests/messaging/router.test.ts`, `tests/core/capture.test.ts`, `tests/integration/capture-flow.test.ts`
 
 **Interfaces:**
+
 - Produces `RequestSchema`, `ResponseSchema`, `createMessageRouter(services)`, `sendRequest(request)`, and `CaptureService.captureTab(tabId, frameId?)`.
 - Capture result is `{ quote, prefix, suffix, heading?, context?, title, url, canonicalUrl? }` or a typed unsupported/no-selection error.
 
 - [ ] **Step 1: Write failing protocol and spoof tests**
 
 ```ts
-await expect(router({ type: 'deleteEverything' }, internalSender)).resolves.toMatchObject({ ok: false, code: 'INVALID_MESSAGE' });
-await expect(router(validCreateRequest, { id: 'other-extension' })).resolves.toMatchObject({ ok: false, code: 'UNTRUSTED_SENDER' });
+await expect(router({ type: 'deleteEverything' }, internalSender)).resolves.toMatchObject({
+  ok: false,
+  code: 'INVALID_MESSAGE',
+});
+await expect(router(validCreateRequest, { id: 'other-extension' })).resolves.toMatchObject({
+  ok: false,
+  code: 'UNTRUSTED_SENDER',
+});
 ```
 
 - [ ] **Step 2: Verify red**
@@ -206,20 +229,30 @@ Run `git add entrypoints src/messaging src/core src/domain tests && git commit -
 ### Task 5: Conservative TextQuote anchoring
 
 **Files:**
+
 - Create: `src/domain/anchor.ts`, `src/domain/text-nodes.ts`, `entrypoints/anchor.content.ts`
 - Modify: `src/core/capture.ts`, `src/messaging/protocol.ts`, `src/messaging/router.ts`
 - Test: `tests/unit/anchor.test.ts`, `tests/integration/anchor-flow.test.ts`
 - Create: `tests/fixtures/site/article.html`, `tests/fixtures/site/repeated.html`, `tests/fixtures/site/changed.html`, `tests/fixtures/site/dynamic.html`, `tests/fixtures/site/hostile.html`
 
 **Interfaces:**
+
 - Produces `findAnchor(text, selector): { status: 'found'; start: number; end: number } | { status: 'ambiguous' | 'not-found' }`.
 - Runtime result is `{ status: 'marked'; count: 1 } | { status: 'ambiguous' | 'not-found' | 'unsupported' }`.
 
 - [ ] **Step 1: Write failing exact/ambiguous/changed-source tests**
 
 ```ts
-expect(findAnchor('before exact quote after', { exact: 'exact quote', prefix: 'before ', suffix: ' after' })).toMatchObject({ status: 'found' });
-expect(findAnchor('x repeat y x repeat y', { exact: 'repeat', prefix: 'x ', suffix: ' y' })).toEqual({ status: 'ambiguous' });
+expect(
+  findAnchor('before exact quote after', {
+    exact: 'exact quote',
+    prefix: 'before ',
+    suffix: ' after',
+  }),
+).toMatchObject({ status: 'found' });
+expect(
+  findAnchor('x repeat y x repeat y', { exact: 'repeat', prefix: 'x ', suffix: ' y' }),
+).toEqual({ status: 'ambiguous' });
 expect(findAnchor('the page changed', selector)).toEqual({ status: 'not-found' });
 ```
 
@@ -242,11 +275,13 @@ Run `git add entrypoints/anchor.content.ts src tests && git commit -m "feat: re-
 ### Task 6: Markdown/JSON backup and validated restore
 
 **Files:**
+
 - Create: `src/core/export.ts`, `src/core/import.ts`, `src/domain/backup.ts`, `src/ui/download.ts`
 - Modify: `src/messaging/protocol.ts`, `src/messaging/router.ts`
 - Test: `tests/core/export.test.ts`, `tests/core/import.test.ts`, `tests/security/import-security.test.ts`
 
 **Interfaces:**
+
 - Produces `exportMarkdown(snapshot): string`, `exportJson(snapshot): string`, and `importJson(input, repository): Promise<ImportReport>`.
 - `ImportReport` contains created, updated, skippedDuplicate, and rejected counts plus record-scoped reasons.
 
@@ -277,11 +312,13 @@ Run `git add src tests && git commit -m "feat: add private research backups"`.
 ### Task 7: Svelte popup and research library
 
 **Files:**
+
 - Create: `src/ui/theme.css`, `src/ui/global.css`, `src/ui/stores.ts`, `src/ui/components/*.svelte`
 - Modify: `entrypoints/popup/App.svelte`, `entrypoints/sidepanel/App.svelte`
 - Test: `tests/ui/popup.test.ts`, `tests/ui/library.test.ts`, `tests/ui/accessibility.test.ts`, `tests/security/rendering.test.ts`
 
 **Interfaces:**
+
 - Popup uses `capture.current`, `collections.list`, and `highlights.create` messages.
 - Library uses search/filter/edit/archive/delete/import/export/theme messages and renders only text-bound content.
 
@@ -316,11 +353,13 @@ Run `git add entrypoints src/ui tests/ui tests/security && git commit -m "feat: 
 ### Task 8: Optional Ollama provider
 
 **Files:**
+
 - Create: `src/ai/provider.ts`, `src/ai/no-ai.ts`, `src/ai/ollama.ts`, `src/ai/schemas.ts`
 - Modify: `src/messaging/protocol.ts`, `src/messaging/router.ts`, `entrypoints/sidepanel/App.svelte`
 - Test: `tests/ai/no-ai.test.ts`, `tests/ai/ollama.test.ts`, `tests/integration/ai-disabled.test.ts`
 
 **Interfaces:**
+
 - Produces `AIProvider` with `summarize`, `explain`, `suggestTags`, and `collectionOverview`.
 - Produces `NoAIProvider` and `OllamaProvider({ fetch, model, timeoutMs })`.
 
@@ -347,12 +386,14 @@ Run `git add src/ai src/messaging entrypoints/sidepanel tests && git commit -m "
 ### Task 9: Packaged browser flows, CI, documentation, and store assets
 
 **Files:**
+
 - Create: `tests/e2e/chromium.spec.ts`, `tests/e2e/firefox.ts`, `tests/e2e/manifest-packages.test.ts`, `tests/e2e/server.ts`, `playwright.config.ts`
 - Create: `.github/workflows/ci.yml`, `.github/ISSUE_TEMPLATE/*`, `.github/pull_request_template.md`
 - Create: `README.md`, `PRIVACY.md`, `SECURITY.md`, `CONTRIBUTING.md`, `LICENSE`, `docs/ARCHITECTURE.md`, `docs/PERMISSIONS.md`, `docs/TESTING.md`, `docs/STORE_SUBMISSION.md`, `docs/store/*`
 - Create: `scripts/capture-screenshots.ts`, `docs/images/*`
 
 **Interfaces:**
+
 - Produces zipped `.output/tracemark-1.0.0-chrome.zip` and `.output/tracemark-1.0.0-firefox.zip` after version promotion.
 - CI job status is the release gate.
 
@@ -387,9 +428,11 @@ Run `git add . && git commit -m "release: prepare TraceMark v1.0.0"`.
 ### Task 10: GitHub integration and release
 
 **Files:**
+
 - Modify only files required by review or CI findings.
 
 **Interfaces:**
+
 - Produces green PRs merged to `main`, tag `v1.0.0`, GitHub Release notes, and two unsigned store-ready archives.
 
 - [ ] **Step 1: Push each scoped branch and open its linked PR**
