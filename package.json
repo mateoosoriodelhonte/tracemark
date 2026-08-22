@@ -1,0 +1,55 @@
+{
+  "name": "tracemark",
+  "description": "Save the useful part of the web — and keep the source attached.",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "packageManager": "pnpm@11.19.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "wxt",
+    "dev:firefox": "wxt -b firefox --mv3",
+    "build": "pnpm build:chrome",
+    "build:chrome": "wxt build -b chrome --mv3",
+    "build:firefox": "wxt build -b firefox --mv3",
+    "zip:chrome": "wxt zip -b chrome --mv3",
+    "zip:firefox": "wxt zip -b firefox --mv3",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "svelte-check --tsconfig ./tsconfig.json",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "check:manifests": "vitest run tests/manifest.test.ts",
+    "lint:firefox": "web-ext lint --source-dir .output/firefox-mv3 --output text",
+    "check": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm build:chrome && pnpm build:firefox && pnpm test && pnpm lint:firefox",
+    "postinstall": "wxt prepare"
+  },
+  "dependencies": {
+    "dexie": "4.4.5",
+    "zod": "4.4.3"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "@tsconfig/svelte": "5.0.8",
+    "@sveltejs/vite-plugin-svelte": "7.3.0",
+    "@wxt-dev/module-svelte": "2.0.5",
+    "eslint": "10.8.1",
+    "eslint-plugin-svelte": "3.23.0",
+    "fake-indexeddb": "6.2.4",
+    "globals": "17.11.0",
+    "prettier": "3.9.6",
+    "prettier-plugin-svelte": "4.1.1",
+    "svelte": "5.56.10",
+    "svelte-check": "4.4.4",
+    "tslib": "2.8.1",
+    "typescript": "5.9.3",
+    "typescript-eslint": "8.67.0",
+    "vite": "8.1.5",
+    "vitest": "4.1.11",
+    "web-ext": "10.5.0",
+    "wxt": "0.21.4"
+  }
+}
