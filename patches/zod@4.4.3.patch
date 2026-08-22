@@ -1,0 +1,95 @@
+diff --git a/v4/core/doc.cjs b/v4/core/doc.cjs
+index 6ea85c1b17084dc0bd1b166ea9c15239e10f969a..b986790f1cfed8d016c6606b6508f74992c4dd0b 100644
+--- a/v4/core/doc.cjs
++++ b/v4/core/doc.cjs
+@@ -28,12 +28,7 @@ class Doc {
+         }
+     }
+     compile() {
+-        const F = Function;
+-        const args = this?.args;
+-        const content = this?.content ?? [``];
+-        const lines = [...content.map((x) => `  ${x}`)];
+-        // console.log(lines.join("\n"));
+-        return new F(...args, lines.join("\n"));
++        throw new Error("Dynamic compilation is disabled for WebExtensions");
+     }
+ }
+ exports.Doc = Doc;
+diff --git a/v4/core/doc.js b/v4/core/doc.js
+index 2a2bf636dbd8b22ba4443e887272c7ce8fcf0290..7b08e9691af2295ad66791d76e442364a6070dea 100644
+--- a/v4/core/doc.js
++++ b/v4/core/doc.js
+@@ -25,11 +25,6 @@ export class Doc {
+         }
+     }
+     compile() {
+-        const F = Function;
+-        const args = this?.args;
+-        const content = this?.content ?? [``];
+-        const lines = [...content.map((x) => `  ${x}`)];
+-        // console.log(lines.join("\n"));
+-        return new F(...args, lines.join("\n"));
++        throw new Error("Dynamic compilation is disabled for WebExtensions");
+     }
+ }
+diff --git a/v4/core/util.cjs b/v4/core/util.cjs
+index a989ae3fdf10abc26782e9e690413b8b28ef90bb..7d0f16a3b3d47acbd0110c1b87d3c6605b798a9b 100644
+--- a/v4/core/util.cjs
++++ b/v4/core/util.cjs
+@@ -201,23 +201,8 @@ function isObject(data) {
+     return typeof data === "object" && data !== null && !Array.isArray(data);
+ }
+ exports.allowsEval = cached(() => {
+-    // Skip the probe under `jitless`: strict CSPs report the caught `new Function`
+-    // as a `securitypolicyviolation` even though the throw is swallowed.
+-    if (core_js_1.globalConfig.jitless) {
+-        return false;
+-    }
+-    // @ts-ignore
+-    if (typeof navigator !== "undefined" && navigator?.userAgent?.includes("Cloudflare")) {
+-        return false;
+-    }
+-    try {
+-        const F = Function;
+-        new F("");
+-        return true;
+-    }
+-    catch (_) {
+-        return false;
+-    }
++    // TraceMark ships under the WebExtension CSP and always uses Zod's interpreter.
++    return false;
+ });
+ function isPlainObject(o) {
+     if (isObject(o) === false)
+diff --git a/v4/core/util.js b/v4/core/util.js
+index ab2e47035f615af10c06057c42b88feb633b5366..774313cefba3feec5a28658d250c6de3743921db 100644
+--- a/v4/core/util.js
++++ b/v4/core/util.js
+@@ -143,23 +143,8 @@ export function isObject(data) {
+     return typeof data === "object" && data !== null && !Array.isArray(data);
+ }
+ export const allowsEval = /* @__PURE__*/ cached(() => {
+-    // Skip the probe under `jitless`: strict CSPs report the caught `new Function`
+-    // as a `securitypolicyviolation` even though the throw is swallowed.
+-    if (globalConfig.jitless) {
+-        return false;
+-    }
+-    // @ts-ignore
+-    if (typeof navigator !== "undefined" && navigator?.userAgent?.includes("Cloudflare")) {
+-        return false;
+-    }
+-    try {
+-        const F = Function;
+-        new F("");
+-        return true;
+-    }
+-    catch (_) {
+-        return false;
+-    }
++    // TraceMark ships under the WebExtension CSP and always uses Zod's interpreter.
++    return false;
+ });
+ export function isPlainObject(o) {
+     if (isObject(o) === false)

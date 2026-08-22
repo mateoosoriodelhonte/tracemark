@@ -12,6 +12,8 @@ import {
 } from './constants';
 import { safeSourceUrl } from './urls';
 
+z.config({ jitless: true });
+
 const NonBlankString = (max: number) =>
   z
     .string()
@@ -99,3 +101,10 @@ export const CaptureResultSchema = z
     canonicalUrl: WebUrlSchema.optional(),
   })
   .strict();
+
+export const CapturePageResultSchema = z.discriminatedUnion('status', [
+  z.object({ status: z.literal('captured'), value: CaptureResultSchema }).strict(),
+  z.object({ status: z.literal('no-selection') }).strict(),
+  z.object({ status: z.literal('unsupported') }).strict(),
+  z.object({ status: z.literal('invalid-selection') }).strict(),
+]);
