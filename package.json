@@ -20,6 +20,8 @@
     "package:validate": "node --experimental-strip-types scripts/validate-packages.ts",
     "test:e2e:packages": "vitest run tests/e2e/manifest-packages.test.ts",
     "test:e2e:chromium": "pnpm build:chrome && playwright test --config playwright.config.ts",
+    "test:e2e:firefox": "pnpm zip:firefox && node --experimental-strip-types tests/e2e/firefox.ts",
+    "test:e2e:firefox:release": "TRACEMARK_FIREFOX_STRICT=1 pnpm test:e2e:firefox",
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "svelte-check --tsconfig ./tsconfig.json",
