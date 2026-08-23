@@ -2,7 +2,7 @@
 
 import { readFileSync } from 'node:fs';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/svelte';
-import { afterEach, describe, expect, test, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import App from '../../src/entrypoints/sidepanel/App.svelte';
 import type { AIResult, Highlight, Settings } from '../../src/domain/models';
 import type { MessageRequest, MessageResponse } from '../../src/messaging/protocol';
@@ -32,7 +32,14 @@ const settings: Settings = {
   theme: 'system',
   ai: { provider: 'none', model: 'llama3.2' },
 };
-const ollamaOrigin = 'http://127.0.0.1:11434/*';
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((resolvePromise) => {
+    resolve = resolvePromise;
+  });
+  return { promise, resolve };
+}
 
 function libraryRequest(
   savedSettings: Settings = settings,
@@ -108,30 +115,203 @@ function libraryRequest(
   });
 }
 
-afterEach(cleanup);
+beforeEach(() => {
+  vi.stubGlobal('browser', {
+    permissions: {
+      contains: vi.fn().mockResolvedValue(false),
+      request: vi.fn().mockResolvedValue(true),
+      remove: vi.fn().mockResolvedValue(true),
+    },
+  });
+});
+
+afterEach(() => {
+  cleanup();
+  vi.unstubAllGlobals();
+});
 
 describe('research library side panel', () => {
-  test('requests Ollama permission only after explicit consent and preserves disabled settings on denial', async () => {
+  test('keeps Firefox local AI disabled when built-in data consent is unsupported', async () => {
     const request = libraryRequest();
-    const requestOllamaPermission = vi.fn().mockResolvedValue(false);
-    render(App, { props: { request, requestOllamaPermission } });
+    const requestLocalAIDataCollection = vi.fn().mockResolvedValue('unsupported');
+    render(App, { props: { request, requestLocalAIDataCollection, firefox: true } });
     await screen.findByText('<script>alert(1)</script>');
-
-    expect(requestOllamaPermission).not.toHaveBeenCalled();
-    expect(request).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'settings.ai.set' }));
 
     await fireEvent.click(screen.getByRole('button', { name: 'Enable local AI' }));
 
-    expect(requestOllamaPermission).toHaveBeenCalledOnce();
-    expect(requestOllamaPermission).toHaveBeenCalledWith([ollamaOrigin]);
     expect(request).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'settings.ai.set' }));
+    expect(screen.getByRole('alert')).toHaveTextContent(/firefox data-consent support/i);
+  });
+
+  test('fails closed before dispatch when a local AI grant was revoked outside TraceMark', async () => {
+    const generated: AIResult = {
+      id: '5d84d7d8-b47e-47b2-a44f-a25491ac9234',
+      schemaVersion: 1,
+      kind: 'summary',
+      provider: 'ollama',
+      sourceHighlightIds: [hostileHighlight.id],
+      content: 'This must not be returned without consent.',
+      createdAt: '2026-08-22T18:00:00.000Z',
+    };
+    const request = libraryRequest(
+      { ...settings, ai: { provider: 'ollama', model: 'llama3.2' } },
+      [hostileHighlight],
+      generated,
+    );
+    const hasLocalAIPermissions = vi.fn().mockResolvedValue(false);
+    const removeLocalAIPermissions = vi.fn().mockResolvedValue(true);
+    render(App, {
+      props: { request, hasLocalAIPermissions, removeLocalAIPermissions },
+    });
+    await screen.findByText('<script>alert(1)</script>');
+    await fireEvent.click(
+      screen.getByRole('checkbox', { name: `Select ${hostileHighlight.title}` }),
+    );
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Summarize' }));
+
+    await waitFor(() => expect(hasLocalAIPermissions).toHaveBeenCalledOnce());
+    expect(request).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'ai.run' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      /permission.*removed or unavailable/i,
+    );
+  });
+
+  test('requests Ollama permission only after explicit consent and preserves disabled settings on denial', async () => {
+    const request = libraryRequest();
+    const permission = deferred<'denied'>();
+    const requestLocalAIOrigin = vi.fn().mockReturnValue(permission.promise);
+    const rollbackLocalAIPermissions = vi.fn().mockResolvedValue(true);
+    render(App, {
+      props: { request, requestLocalAIOrigin, rollbackLocalAIPermissions },
+    });
+    await screen.findByText('<script>alert(1)</script>');
+
+    expect(requestLocalAIOrigin).not.toHaveBeenCalled();
+    expect(request).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'settings.ai.set' }));
+
+    const click = fireEvent.click(screen.getByRole('button', { name: 'Enable local AI' }));
+
+    expect(requestLocalAIOrigin).toHaveBeenCalledOnce();
+    expect(request).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'settings.ai.set' }));
+    permission.resolve('denied');
+    await click;
+    expect(request).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'settings.ai.set' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent(/permission.*not granted/i);
+  });
+
+  test('Firefox uses two explicit clicks and invokes each permission request synchronously', async () => {
+    const request = libraryRequest();
+    const dataPermission = deferred<'granted'>();
+    const originPermission = deferred<'granted'>();
+    const requestLocalAIDataCollection = vi.fn().mockReturnValue(dataPermission.promise);
+    const requestLocalAIOrigin = vi.fn().mockReturnValue(originPermission.promise);
+    const hasAnyLocalAIPermissions = vi.fn().mockResolvedValue(false);
+    render(App, {
+      props: {
+        request,
+        requestLocalAIDataCollection,
+        requestLocalAIOrigin,
+        hasAnyLocalAIPermissions,
+        firefox: true,
+      },
+    });
+    await screen.findByText('<script>alert(1)</script>');
+
+    const firstClick = fireEvent.click(screen.getByRole('button', { name: 'Enable local AI' }));
+    expect(requestLocalAIDataCollection).toHaveBeenCalledOnce();
+    expect(requestLocalAIOrigin).not.toHaveBeenCalled();
+    expect(hasAnyLocalAIPermissions).toHaveBeenCalledOnce();
+    dataPermission.resolve('granted');
+    await firstClick;
+
+    const continueButton = await screen.findByRole('button', {
+      name: 'Continue enabling local AI',
+    });
+    expect(requestLocalAIOrigin).not.toHaveBeenCalled();
+    const secondClick = fireEvent.click(continueButton);
+    expect(requestLocalAIOrigin).toHaveBeenCalledOnce();
+    expect(hasAnyLocalAIPermissions).toHaveBeenCalledOnce();
+    originPermission.resolve('granted');
+    await secondClick;
+
+    await waitFor(() =>
+      expect(request).toHaveBeenCalledWith({
+        type: 'settings.ai.set',
+        provider: 'ollama',
+        model: 'llama3.2',
+      }),
+    );
+  });
+
+  test('Firefox origin denial rolls back the earlier data grant and resets the two-step UI', async () => {
+    const request = libraryRequest();
+    const requestLocalAIDataCollection = vi.fn().mockResolvedValue('granted');
+    const requestLocalAIOrigin = vi.fn().mockResolvedValue('denied');
+    const rollbackLocalAIPermissions = vi.fn().mockResolvedValue(true);
+    const hasAnyLocalAIPermissions = vi.fn().mockResolvedValue(false);
+    render(App, {
+      props: {
+        request,
+        requestLocalAIDataCollection,
+        requestLocalAIOrigin,
+        rollbackLocalAIPermissions,
+        hasAnyLocalAIPermissions,
+        firefox: true,
+      },
+    });
+    await screen.findByText('<script>alert(1)</script>');
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Enable local AI' }));
+    await fireEvent.click(
+      await screen.findByRole('button', { name: 'Continue enabling local AI' }),
+    );
+
+    await waitFor(() => expect(rollbackLocalAIPermissions).toHaveBeenCalledOnce());
+    expect(request).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'settings.ai.set' }));
+    expect(screen.getByRole('button', { name: 'Enable local AI' })).toBeInTheDocument();
     expect(screen.getByRole('alert')).toHaveTextContent(/permission.*not granted/i);
+  });
+
+  test('Firefox reload between prompts fails closed and offers cleanup instead of continuing', async () => {
+    const requestLocalAIDataCollection = vi.fn().mockResolvedValue('granted');
+    const requestLocalAIOrigin = vi.fn().mockResolvedValue('granted');
+    const first = render(App, {
+      props: {
+        request: libraryRequest(),
+        requestLocalAIDataCollection,
+        requestLocalAIOrigin,
+        hasAnyLocalAIPermissions: vi.fn().mockResolvedValue(false),
+        firefox: true,
+      },
+    });
+    await screen.findByText('<script>alert(1)</script>');
+    await fireEvent.click(screen.getByRole('button', { name: 'Enable local AI' }));
+    await screen.findByRole('button', { name: 'Continue enabling local AI' });
+    first.unmount();
+
+    const removeLocalAIPermissions = vi.fn().mockResolvedValue(true);
+    render(App, {
+      props: {
+        request: libraryRequest(),
+        requestLocalAIDataCollection,
+        requestLocalAIOrigin,
+        hasAnyLocalAIPermissions: vi.fn().mockResolvedValue(true),
+        removeLocalAIPermissions,
+        firefox: true,
+      },
+    });
+
+    expect(await screen.findByRole('button', { name: 'Retry permission removal' })).toBeVisible();
+    expect(screen.queryByRole('button', { name: 'Continue enabling local AI' })).toBeNull();
+    expect(requestLocalAIOrigin).not.toHaveBeenCalled();
+    expect(removeLocalAIPermissions).not.toHaveBeenCalled();
   });
 
   test('enables the chosen local model without running AI', async () => {
     const request = libraryRequest();
-    const requestOllamaPermission = vi.fn().mockResolvedValue(true);
-    render(App, { props: { request, requestOllamaPermission } });
+    const requestLocalAIOrigin = vi.fn().mockResolvedValue('granted');
+    render(App, { props: { request, requestLocalAIOrigin } });
     await screen.findByText('<script>alert(1)</script>');
 
     await fireEvent.input(screen.getByRole('textbox', { name: 'Ollama model' }), {
@@ -151,15 +331,15 @@ describe('research library side panel', () => {
 
   test('rejects an invalid model before requesting permission and restores the persisted model', async () => {
     const request = libraryRequest();
-    const requestOllamaPermission = vi.fn().mockResolvedValue(true);
-    render(App, { props: { request, requestOllamaPermission } });
+    const requestLocalAIOrigin = vi.fn().mockResolvedValue('granted');
+    render(App, { props: { request, requestLocalAIOrigin } });
     await screen.findByText('<script>alert(1)</script>');
     const modelInput = screen.getByRole('textbox', { name: 'Ollama model' });
 
     await fireEvent.input(modelInput, { target: { value: 'model name with spaces' } });
     await fireEvent.click(screen.getByRole('button', { name: 'Enable local AI' }));
 
-    expect(requestOllamaPermission).not.toHaveBeenCalled();
+    expect(requestLocalAIOrigin).not.toHaveBeenCalled();
     expect(request).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'settings.ai.set' }));
     expect(modelInput).toHaveValue('llama3.2');
     expect(screen.getByRole('alert')).toHaveTextContent(/valid ollama model/i);
@@ -177,16 +357,27 @@ describe('research library side panel', () => {
       }
       return baseRequest(message);
     });
-    const requestOllamaPermission = vi.fn().mockResolvedValue(true);
-    const removeOllamaPermission = vi.fn().mockResolvedValue(true);
+    const requestLocalAIDataCollection = vi.fn().mockResolvedValue('granted');
+    const requestLocalAIOrigin = vi.fn().mockResolvedValue('granted');
+    const rollbackLocalAIPermissions = vi.fn().mockResolvedValue(true);
     render(App, {
-      props: { request, requestOllamaPermission, removeOllamaPermission },
+      props: {
+        request,
+        requestLocalAIDataCollection,
+        requestLocalAIOrigin,
+        rollbackLocalAIPermissions,
+        hasAnyLocalAIPermissions: vi.fn().mockResolvedValue(false),
+        firefox: true,
+      },
     });
     await screen.findByText('<script>alert(1)</script>');
 
     await fireEvent.click(screen.getByRole('button', { name: 'Enable local AI' }));
+    await fireEvent.click(
+      await screen.findByRole('button', { name: 'Continue enabling local AI' }),
+    );
 
-    await waitFor(() => expect(removeOllamaPermission).toHaveBeenCalledWith([ollamaOrigin]));
+    await waitFor(() => expect(rollbackLocalAIPermissions).toHaveBeenCalledOnce());
     expect(screen.getByText('Disabled')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Enable local AI' })).toBeInTheDocument();
     expect(screen.getByRole('alert')).toHaveTextContent(
@@ -206,23 +397,71 @@ describe('research library side panel', () => {
       }
       return baseRequest(message);
     });
-    const requestOllamaPermission = vi.fn().mockResolvedValue(true);
-    const removeOllamaPermission = vi.fn().mockResolvedValueOnce(false).mockResolvedValueOnce(true);
+    const requestLocalAIOrigin = vi.fn().mockResolvedValue('granted');
+    const rollbackLocalAIPermissions = vi
+      .fn()
+      .mockResolvedValueOnce(false)
+      .mockResolvedValueOnce(true);
     render(App, {
-      props: { request, requestOllamaPermission, removeOllamaPermission },
+      props: { request, requestLocalAIOrigin, rollbackLocalAIPermissions },
     });
     await screen.findByText('<script>alert(1)</script>');
 
     await fireEvent.click(screen.getByRole('button', { name: 'Enable local AI' }));
     const retry = await screen.findByRole('button', { name: 'Retry permission removal' });
+    const enable = screen.getByRole('button', { name: 'Enable local AI' });
 
     expect(screen.getByRole('alert')).toHaveTextContent(/permission could not be removed/i);
+    expect(enable).toBeDisabled();
+    await fireEvent.click(enable);
+    expect(requestLocalAIOrigin).toHaveBeenCalledOnce();
     await fireEvent.click(retry);
-    await waitFor(() => expect(removeOllamaPermission).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(rollbackLocalAIPermissions).toHaveBeenCalledTimes(2));
     await waitFor(() =>
       expect(screen.queryByRole('button', { name: 'Retry permission removal' })).toBeNull(),
     );
     expect(screen.getByText('Disabled')).toBeInTheDocument();
+  });
+
+  test('reload with disabled settings surfaces residual permission cleanup without auto-removing', async () => {
+    const request = libraryRequest();
+    const hasAnyLocalAIPermissions = vi.fn().mockResolvedValue(true);
+    const removeLocalAIPermissions = vi.fn().mockResolvedValue(true);
+    render(App, {
+      props: { request, hasAnyLocalAIPermissions, removeLocalAIPermissions },
+    });
+
+    const retry = await screen.findByRole('button', { name: 'Retry permission removal' });
+    const enable = screen.getByRole('button', { name: 'Enable local AI' });
+    expect(enable).toBeDisabled();
+    expect(removeLocalAIPermissions).not.toHaveBeenCalled();
+
+    await fireEvent.click(retry);
+
+    await waitFor(() => expect(removeLocalAIPermissions).toHaveBeenCalledOnce());
+    await waitFor(() => expect(enable).toBeEnabled());
+  });
+
+  test('reload blocks enabling until failed permission inspection is explicitly retried', async () => {
+    const request = libraryRequest();
+    const hasAnyLocalAIPermissions = vi
+      .fn()
+      .mockRejectedValue(new Error('Browser permission inspection failed.'));
+    const removeLocalAIPermissions = vi.fn().mockResolvedValue(true);
+    render(App, {
+      props: { request, hasAnyLocalAIPermissions, removeLocalAIPermissions },
+    });
+
+    const retry = await screen.findByRole('button', { name: 'Retry permission removal' });
+    const enable = screen.getByRole('button', { name: 'Enable local AI' });
+    expect(screen.getByRole('alert')).toHaveTextContent(/permission.*could not be inspected/i);
+    expect(enable).toBeDisabled();
+    expect(removeLocalAIPermissions).not.toHaveBeenCalled();
+
+    await fireEvent.click(retry);
+
+    await waitFor(() => expect(removeLocalAIPermissions).toHaveBeenCalledOnce());
+    await waitFor(() => expect(enable).toBeEnabled());
   });
 
   test('disables AI before attempting to remove Ollama permission', async () => {
@@ -230,7 +469,7 @@ describe('research library side panel', () => {
       ...settings,
       ai: { provider: 'ollama', model: 'llama3.2' },
     });
-    const removeOllamaPermission = vi.fn(async () => {
+    const removeLocalAIPermissions = vi.fn(async () => {
       expect(request).toHaveBeenCalledWith({
         type: 'settings.ai.set',
         provider: 'none',
@@ -238,12 +477,12 @@ describe('research library side panel', () => {
       });
       throw new Error('Browser permission could not be removed.');
     });
-    render(App, { props: { request, removeOllamaPermission } });
+    render(App, { props: { request, removeLocalAIPermissions } });
     await screen.findByText('<script>alert(1)</script>');
 
     await fireEvent.click(screen.getByRole('button', { name: 'Disable local AI' }));
 
-    expect(removeOllamaPermission).toHaveBeenCalledWith([ollamaOrigin]);
+    expect(removeLocalAIPermissions).toHaveBeenCalledOnce();
     expect(await screen.findByRole('alert')).toHaveTextContent(/permission could not be removed/i);
     expect(screen.getByRole('button', { name: 'Enable local AI' })).toBeInTheDocument();
   });
@@ -253,8 +492,8 @@ describe('research library side panel', () => {
       ...settings,
       ai: { provider: 'ollama', model: 'llama3.2' },
     });
-    const removeOllamaPermission = vi.fn().mockResolvedValue(true);
-    render(App, { props: { request, removeOllamaPermission } });
+    const removeLocalAIPermissions = vi.fn().mockResolvedValue(true);
+    render(App, { props: { request, removeLocalAIPermissions } });
     await screen.findByText('<script>alert(1)</script>');
     const modelInput = screen.getByRole('textbox', { name: 'Ollama model' });
 
@@ -287,8 +526,8 @@ describe('research library side panel', () => {
       }
       return baseRequest(message);
     });
-    const removeOllamaPermission = vi.fn().mockResolvedValue(true);
-    render(App, { props: { request, removeOllamaPermission } });
+    const removeLocalAIPermissions = vi.fn().mockResolvedValue(true);
+    render(App, { props: { request, removeLocalAIPermissions } });
     await screen.findByText('<script>alert(1)</script>');
     await fireEvent.click(
       screen.getByRole('checkbox', { name: `Select ${hostileHighlight.title}` }),
@@ -323,7 +562,8 @@ describe('research library side panel', () => {
       createdAt: '2026-08-22T18:00:00.000Z',
     };
     const request = libraryRequest(enabledSettings, [hostileHighlight, secondHighlight], generated);
-    const { container } = render(App, { props: { request } });
+    const hasLocalAIPermissions = vi.fn().mockResolvedValue(true);
+    const { container } = render(App, { props: { request, hasLocalAIPermissions } });
     await screen.findByText(secondHighlight.quote);
 
     for (const name of ['Summarize', 'Explain', 'Suggest tags', 'Overview']) {
@@ -360,7 +600,8 @@ describe('research library side panel', () => {
       hostileHighlight,
       secondHighlight,
     ]);
-    render(App, { props: { request } });
+    const hasLocalAIPermissions = vi.fn().mockResolvedValue(true);
+    render(App, { props: { request, hasLocalAIPermissions } });
     await screen.findByText(secondHighlight.quote);
 
     await fireEvent.click(
@@ -396,7 +637,8 @@ describe('research library side panel', () => {
       [hostileHighlight, secondHighlight],
       generated,
     );
-    render(App, { props: { request } });
+    const hasLocalAIPermissions = vi.fn().mockResolvedValue(true);
+    render(App, { props: { request, hasLocalAIPermissions } });
     await screen.findByText(secondHighlight.quote);
 
     await fireEvent.click(
@@ -466,7 +708,8 @@ describe('research library side panel', () => {
     const request = vi.fn((message: MessageRequest) =>
       message.type === 'ai.run' ? pendingAI : baseRequest(message),
     );
-    render(App, { props: { request } });
+    const hasLocalAIPermissions = vi.fn().mockResolvedValue(true);
+    render(App, { props: { request, hasLocalAIPermissions } });
     await screen.findByText('<script>alert(1)</script>');
 
     await fireEvent.click(

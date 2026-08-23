@@ -21,8 +21,8 @@ const collection: Collection = {
 const settings: Settings = {
   id: 'settings',
   schemaVersion: 1,
-  theme: 'system',
-  ai: { provider: 'ollama', model: 'llama3.2' },
+  theme: 'light',
+  ai: { provider: 'none', model: 'llama3.2' },
 };
 const research: Highlight[] = [
   {
@@ -94,8 +94,27 @@ async function request(message: MessageRequest): Promise<MessageResponse> {
       };
     case 'collections.list':
       return { ok: true, data: [inbox, collection] };
-    case 'research.search':
-      return { ok: true, data: research };
+    case 'research.search': {
+      const query = message.input.query.trim().toLocaleLowerCase('en-US');
+      const filtered = research.filter((highlight) => {
+        const searchableText = [
+          highlight.quote,
+          highlight.title,
+          highlight.hostname,
+          highlight.note,
+          ...highlight.tags,
+          highlight.collectionId === collection.id ? collection.name : inbox.name,
+        ]
+          .join(' ')
+          .toLocaleLowerCase('en-US');
+        return (
+          (!query || searchableText.includes(query)) &&
+          (!message.input.collectionId || highlight.collectionId === message.input.collectionId) &&
+          (!message.input.tag || highlight.tags.includes(message.input.tag))
+        );
+      });
+      return { ok: true, data: filtered };
+    }
     case 'tags.list':
       return { ok: true, data: ['evidence', 'provenance', 'rag', 'retrieval'] };
     case 'highlights.recent':
@@ -141,7 +160,11 @@ mount(App, {
   target: document.getElementById('app')!,
   props: {
     request,
-    requestOllamaPermission: async () => true,
-    removeOllamaPermission: async () => true,
+    requestLocalAIDataCollection: async () => 'granted',
+    requestLocalAIOrigin: async () => 'granted',
+    rollbackLocalAIPermissions: async () => true,
+    removeLocalAIPermissions: async () => true,
+    hasLocalAIPermissions: async () => true,
+    hasAnyLocalAIPermissions: async () => false,
   },
 });

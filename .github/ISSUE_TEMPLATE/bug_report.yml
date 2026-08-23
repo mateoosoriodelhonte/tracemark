@@ -1,0 +1,88 @@
+name: Bug report
+description: Report a reproducible problem in TraceMark
+title: '[Bug]: '
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping improve TraceMark. Do not report vulnerabilities or include sensitive research, browsing data, credentials, or exploit details here. Follow SECURITY.md for security reports.
+  - type: input
+    id: version
+    attributes:
+      label: TraceMark version or commit
+      description: For example, 1.0.0 or a commit SHA.
+    validations:
+      required: true
+  - type: dropdown
+    id: browser
+    attributes:
+      label: Browser
+      options:
+        - Chrome
+        - Chromium-based browser
+        - Firefox
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: browser_version
+    attributes:
+      label: Browser version
+    validations:
+      required: true
+  - type: input
+    id: operating_system
+    attributes:
+      label: Operating system and version
+    validations:
+      required: true
+  - type: dropdown
+    id: installation
+    attributes:
+      label: Installation method
+      options:
+        - Chrome unpacked build
+        - Firefox temporary add-on
+        - Release ZIP through an automated harness
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Reproduction steps
+      description: Use a public test page or sanitized fixture. Do not paste private research.
+      placeholder: |
+        1. Open …
+        2. Select …
+        3. Choose …
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Sanitized evidence
+      description: Add screenshots or logs only after removing URLs, quotations, profile paths, tokens, and other sensitive data.
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checks
+      options:
+        - label: I searched existing issues for this problem.
+          required: true
+        - label: This report contains no vulnerability details or sensitive data.
+          required: true

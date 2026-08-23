@@ -1,7 +1,12 @@
 <script lang="ts">
   import { onMount, tick } from 'svelte';
   import type { ZodType } from 'zod';
-  import { OLLAMA_PERMISSION_ORIGIN } from '../../core/ai-assistance';
+  import {
+    createLocalAIPermissionManager,
+    type LocalAIPermissionApi,
+    type LocalAIPermissionManager,
+    type LocalAIPermissionRequestResult,
+  } from '../../core/local-ai-permissions';
   import { INBOX_COLLECTION_ID } from '../../domain/constants';
   import type {
     AIResult,
@@ -29,19 +34,37 @@
   } from '../../messaging/protocol';
 
   type Request = (message: MessageRequest) => Promise<MessageResponse>;
-  type PermissionAction = (origins: string[]) => Promise<boolean>;
   type DialogName = 'edit' | 'collections' | 'backup';
   const MAX_BACKUP_FILE_SIZE = 20_000_000;
   interface Props {
     request?: Request;
-    requestOllamaPermission?: PermissionAction;
-    removeOllamaPermission?: PermissionAction;
+    requestLocalAIDataCollection?: () => Promise<LocalAIPermissionRequestResult>;
+    requestLocalAIOrigin?: () => Promise<LocalAIPermissionRequestResult>;
+    rollbackLocalAIPermissions?: () => Promise<boolean>;
+    removeLocalAIPermissions?: () => Promise<boolean>;
+    hasLocalAIPermissions?: () => Promise<boolean>;
+    hasAnyLocalAIPermissions?: () => Promise<boolean>;
+    firefox?: boolean;
+  }
+
+  let defaultPermissionManager: LocalAIPermissionManager | undefined;
+  function localAIPermissions(): LocalAIPermissionManager {
+    defaultPermissionManager ??= createLocalAIPermissionManager(
+      browser.permissions as unknown as LocalAIPermissionApi,
+      import.meta.env.FIREFOX,
+    );
+    return defaultPermissionManager;
   }
 
   let {
     request = sendRequest,
-    requestOllamaPermission = (origins) => browser.permissions.request({ origins }),
-    removeOllamaPermission = (origins) => browser.permissions.remove({ origins }),
+    requestLocalAIDataCollection = () => localAIPermissions().requestDataCollection(),
+    requestLocalAIOrigin = () => localAIPermissions().requestOrigin(),
+    rollbackLocalAIPermissions = () => localAIPermissions().rollbackRequest(),
+    removeLocalAIPermissions = () => localAIPermissions().remove(),
+    hasLocalAIPermissions = () => localAIPermissions().has(),
+    hasAnyLocalAIPermissions = () => localAIPermissions().hasAny(),
+    firefox = import.meta.env.FIREFOX,
   }: Props = $props();
   let highlights = $state<Highlight[]>([]);
   let collections = $state<Collection[]>([]);
@@ -61,7 +84,9 @@
   let aiError = $state('');
   let aiTaskBusy = $state(false);
   let aiResult = $state<AIResult>();
+  let aiEnableStep = $state<'idle' | 'origin'>('idle');
   let permissionRemovalPending = $state(false);
+  let permissionRemovalMode = $state<'rollback' | 'remove'>('remove');
   let selectedHighlightIds = $state<string[]>([]);
   let activeDialog = $state<DialogName>();
   let returnFocus = $state<HTMLElement>();
@@ -119,6 +144,7 @@
       aiProvider = savedSettings.ai.provider;
       aiModel = savedSettings.ai.model;
       persistedAIModel = savedSettings.ai.model;
+      await reconcileDisabledLocalAIPermissions();
       collections = savedCollections;
       knownTags = savedTags;
       await loadResearch();
@@ -329,8 +355,8 @@
     }
   }
 
-  async function enableLocalAI(): Promise<void> {
-    aiBusy = true;
+  function beginLocalAIEnable(): void {
+    if (permissionRemovalPending) return;
     aiError = '';
     const model = ModelNameSchema.safeParse(aiModel);
     if (!model.success) {
@@ -340,47 +366,138 @@
       return;
     }
     aiModel = model.data;
+    aiBusy = true;
 
-    let granted: boolean;
+    let permissionRequest: Promise<LocalAIPermissionRequestResult>;
     try {
-      granted = await requestOllamaPermission([OLLAMA_PERMISSION_ORIGIN]);
+      permissionRequest = firefox ? requestLocalAIDataCollection() : requestLocalAIOrigin();
     } catch {
-      aiError = 'Ollama permission could not be requested. Local AI remains disabled.';
+      aiError = 'Local AI permissions could not be requested. Local AI remains disabled.';
       aiBusy = false;
       return;
     }
-    if (!granted) {
-      aiError = 'Ollama permission was not granted. Local AI remains disabled.';
+    if (firefox) void finishFirefoxDataRequest(permissionRequest);
+    else void finishOriginRequest(permissionRequest, model.data);
+  }
+
+  function continueLocalAIEnable(): void {
+    if (permissionRemovalPending || aiEnableStep !== 'origin') return;
+    aiBusy = true;
+    aiError = '';
+    let permissionRequest: Promise<LocalAIPermissionRequestResult>;
+    try {
+      permissionRequest = requestLocalAIOrigin();
+    } catch {
+      aiEnableStep = 'idle';
+      aiError = 'Local AI permissions could not be requested. Local AI remains disabled.';
       aiBusy = false;
+      return;
+    }
+    void finishOriginRequest(permissionRequest, aiModel);
+  }
+
+  async function finishFirefoxDataRequest(
+    permissionRequest: Promise<LocalAIPermissionRequestResult>,
+  ): Promise<void> {
+    let permissionResult: LocalAIPermissionRequestResult;
+    try {
+      permissionResult = await permissionRequest;
+    } catch {
+      aiError = 'Local AI permissions could not be requested. Local AI remains disabled.';
+      aiBusy = false;
+      return;
+    }
+    if (permissionResult === 'unsupported') {
+      aiError =
+        'Firefox data-consent support is unavailable in this version. Local AI remains disabled.';
+      aiBusy = false;
+      return;
+    }
+    if (permissionResult !== 'granted') {
+      await handlePermissionFailure(permissionResult);
+      return;
+    }
+
+    aiEnableStep = 'origin';
+    status = 'Firefox data consent granted. Continue to allow access to local Ollama.';
+    aiBusy = false;
+  }
+
+  async function finishOriginRequest(
+    permissionRequest: Promise<LocalAIPermissionRequestResult>,
+    model: string,
+  ): Promise<void> {
+    let permissionResult: LocalAIPermissionRequestResult;
+    try {
+      permissionResult = await permissionRequest;
+    } catch {
+      aiEnableStep = 'idle';
+      aiError = 'Local AI permissions could not be requested. Local AI remains disabled.';
+      aiBusy = false;
+      return;
+    }
+    if (permissionResult === 'unsupported') {
+      aiEnableStep = 'idle';
+      aiError = 'Local AI permissions are unavailable in this browser. Local AI remains disabled.';
+      aiBusy = false;
+      return;
+    }
+    if (permissionResult !== 'granted') {
+      await handlePermissionFailure(permissionResult);
       return;
     }
 
     try {
       const saved = await dataFor(
-        { type: 'settings.ai.set', provider: 'ollama', model: model.data },
+        { type: 'settings.ai.set', provider: 'ollama', model },
         SettingsSchema,
       );
       aiProvider = saved.ai.provider;
       aiModel = saved.ai.model;
       persistedAIModel = saved.ai.model;
+      aiEnableStep = 'idle';
       permissionRemovalPending = false;
       status = 'Local AI enabled. Select research before asking for assistance.';
     } catch {
       aiProvider = 'none';
+      aiEnableStep = 'idle';
       aiModel = persistedAIModel;
-      const removed = await tryRemoveOllamaPermission();
+      const removed = await tryRollbackLocalAIPermissions();
       permissionRemovalPending = !removed;
+      permissionRemovalMode = 'rollback';
       aiError = removed
-        ? 'TraceMark could not enable local AI. Ollama permission was removed.'
-        : 'TraceMark could not enable local AI, and Ollama permission could not be removed. Retry permission removal.';
+        ? 'TraceMark could not enable local AI. Newly granted permission was removed.'
+        : 'TraceMark could not enable local AI, and newly granted permission could not be removed. Retry permission removal.';
     } finally {
       aiBusy = false;
     }
   }
 
+  async function handlePermissionFailure(
+    permissionResult: Exclude<LocalAIPermissionRequestResult, 'granted' | 'unsupported'>,
+  ): Promise<void> {
+    aiEnableStep = 'idle';
+    if (permissionResult === 'cleanup-required') {
+      permissionRemovalPending = true;
+      permissionRemovalMode = 'rollback';
+      aiError = 'Remove the outstanding Local AI permission before enabling again.';
+      aiBusy = false;
+      return;
+    }
+
+    const rolledBack = await tryRollbackLocalAIPermissions();
+    permissionRemovalPending = !rolledBack;
+    permissionRemovalMode = 'rollback';
+    aiError = rolledBack
+      ? 'Local AI permission was not granted. Local AI remains disabled.'
+      : 'Local AI permission was not granted, and a newly granted permission could not be removed. Retry permission removal.';
+    aiBusy = false;
+  }
+
   async function disableLocalAI(): Promise<void> {
     aiBusy = true;
     aiError = '';
+    aiEnableStep = 'idle';
     try {
       const saved = await dataFor(
         { type: 'settings.ai.set', provider: 'none', model: persistedAIModel },
@@ -400,13 +517,15 @@
     }
 
     try {
-      const removed = await removeOllamaPermission([OLLAMA_PERMISSION_ORIGIN]);
+      const removed = await removeLocalAIPermissions();
       permissionRemovalPending = !removed;
-      if (!removed) aiError = 'Ollama permission could not be removed in browser settings.';
-      else status = 'Local AI disabled and Ollama permission removed.';
+      permissionRemovalMode = 'remove';
+      if (!removed) aiError = 'Local AI permission could not be removed in browser settings.';
+      else status = 'Local AI disabled and browser permissions removed.';
     } catch {
       permissionRemovalPending = true;
-      aiError = 'Ollama permission could not be removed in browser settings.';
+      permissionRemovalMode = 'remove';
+      aiError = 'Local AI permission could not be removed in browser settings.';
     } finally {
       aiBusy = false;
     }
@@ -442,11 +561,38 @@
     }
   }
 
-  async function tryRemoveOllamaPermission(): Promise<boolean> {
+  async function tryRollbackLocalAIPermissions(): Promise<boolean> {
     try {
-      return await removeOllamaPermission([OLLAMA_PERMISSION_ORIGIN]);
+      return await rollbackLocalAIPermissions();
     } catch {
       return false;
+    }
+  }
+
+  async function tryRemoveLocalAIPermissions(): Promise<boolean> {
+    try {
+      return await removeLocalAIPermissions();
+    } catch {
+      return false;
+    }
+  }
+
+  async function reconcileDisabledLocalAIPermissions(): Promise<void> {
+    if (aiProvider !== 'none') return;
+    try {
+      if (await hasAnyLocalAIPermissions()) {
+        aiEnableStep = 'idle';
+        permissionRemovalPending = true;
+        permissionRemovalMode = 'remove';
+        aiError =
+          'Local AI is disabled, but browser permission remains. Remove it before enabling again.';
+      }
+    } catch {
+      aiEnableStep = 'idle';
+      permissionRemovalPending = true;
+      permissionRemovalMode = 'remove';
+      aiError =
+        'Local AI permissions could not be inspected. Retry permission removal before enabling.';
     }
   }
 
@@ -454,10 +600,13 @@
     aiBusy = true;
     aiError = '';
     try {
-      const removed = await tryRemoveOllamaPermission();
+      const removed =
+        permissionRemovalMode === 'rollback'
+          ? await tryRollbackLocalAIPermissions()
+          : await tryRemoveLocalAIPermissions();
       permissionRemovalPending = !removed;
-      if (removed) status = 'Ollama permission removed. Local AI remains disabled.';
-      else aiError = 'Ollama permission could not be removed in browser settings.';
+      if (removed) status = 'Local AI permissions removed. Local AI remains disabled.';
+      else aiError = 'Local AI permission could not be removed in browser settings.';
     } finally {
       aiBusy = false;
     }
@@ -483,6 +632,23 @@
     aiTaskBusy = true;
     aiError = '';
     try {
+      if (!(await hasLocalAIPermissions())) {
+        aiProvider = 'none';
+        try {
+          const saved = await dataFor(
+            { type: 'settings.ai.set', provider: 'none', model: persistedAIModel },
+            SettingsSchema,
+          );
+          aiModel = saved.ai.model;
+          persistedAIModel = saved.ai.model;
+        } catch {
+          // The in-memory provider still fails closed even if settings cannot be persisted.
+        }
+        permissionRemovalPending = !(await tryRemoveLocalAIPermissions());
+        permissionRemovalMode = 'remove';
+        aiError = 'Local AI permission was removed or unavailable. Local AI is now disabled.';
+        return;
+      }
       aiResult = await dataFor({ type: 'ai.run', kind, sourceHighlightIds }, AIResultSchema);
       status = `Generated local AI output from ${sourceHighlightIds.length.toLocaleString()} selected quotation${sourceHighlightIds.length === 1 ? '' : 's'}.`;
     } catch (assistanceError) {
@@ -640,8 +806,14 @@
         {#if aiProvider === 'ollama'}
           Assistance uses your selected research and the Ollama model running on this device.
         {:else}
-          Enabling grants access only to <code>127.0.0.1:11434</code>. It does not start Ollama,
-          download models, or contact a cloud service.
+          {#if firefox}
+            Enabling uses two steps: consent for selected website content and source addresses, then
+            access only to
+            <code>127.0.0.1:11434</code>.
+          {:else}
+            Enabling grants access only to <code>127.0.0.1:11434</code>.
+          {/if}
+          It does not start Ollama, download models, or contact a cloud service.
         {/if}
       </p>
       <div class="ai-settings">
@@ -649,6 +821,7 @@
           ><span>Ollama model</span><input
             bind:value={aiModel}
             autocomplete="off"
+            disabled={aiEnableStep === 'origin'}
             onchange={(event) => void saveAIModel(event.currentTarget.value)}
           /></label
         >
@@ -660,12 +833,24 @@
             onclick={() => void disableLocalAI()}>Disable local AI</button
           >
         {:else}
-          <button
-            type="button"
-            class="primary-button"
-            disabled={aiBusy || phase === 'loading' || !aiModel.trim()}
-            onclick={() => void enableLocalAI()}>Enable local AI</button
-          >
+          {#if firefox && aiEnableStep === 'origin'}
+            <button
+              type="button"
+              class="primary-button"
+              disabled={aiBusy || permissionRemovalPending}
+              onclick={continueLocalAIEnable}>Continue enabling local AI</button
+            >
+          {:else}
+            <button
+              type="button"
+              class="primary-button"
+              disabled={aiBusy ||
+                permissionRemovalPending ||
+                phase === 'loading' ||
+                !aiModel.trim()}
+              onclick={beginLocalAIEnable}>Enable local AI</button
+            >
+          {/if}
         {/if}
         {#if permissionRemovalPending}
           <button

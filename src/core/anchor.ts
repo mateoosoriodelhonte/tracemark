@@ -10,6 +10,9 @@ import { safeSourceUrl } from '../domain/urls';
 export type AnchorErrorCode =
   'NO_ACTIVE_TAB' | 'WRONG_PAGE' | 'UNSUPPORTED_PAGE' | 'INVALID_ANCHOR_RESULT';
 
+const ACTIVE_TAB_RECOVERY_GUIDANCE =
+  'TraceMark cannot access this fresh tab yet. Invoke the TraceMark toolbar action or press Alt+Shift+S on this tab, then retry Mark on page. Browser-protected pages cannot be highlighted.';
+
 export class AnchorError extends Error {
   constructor(
     readonly code: AnchorErrorCode,
@@ -56,7 +59,7 @@ export class AnchorService {
     }
     const activeUrl = tab.url === undefined ? undefined : safeSourceUrl(tab.url);
     if (activeUrl === undefined) {
-      throw new AnchorError('UNSUPPORTED_PAGE', 'This browser page cannot be highlighted');
+      throw new AnchorError('UNSUPPORTED_PAGE', ACTIVE_TAB_RECOVERY_GUIDANCE);
     }
     if (activeUrl !== highlight.url && activeUrl !== highlight.canonicalUrl) {
       throw new AnchorError('WRONG_PAGE', 'Open the saved source page before highlighting');
@@ -69,7 +72,7 @@ export class AnchorService {
         files: ['/content-scripts/anchor.js'],
       });
     } catch (error) {
-      throw new AnchorError('UNSUPPORTED_PAGE', 'This browser page cannot be highlighted', {
+      throw new AnchorError('UNSUPPORTED_PAGE', ACTIVE_TAB_RECOVERY_GUIDANCE, {
         cause: error,
       });
     }

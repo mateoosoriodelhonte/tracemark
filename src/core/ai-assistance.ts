@@ -2,15 +2,14 @@ import { AIProviderError, type AIProvider, type ResearchItem } from './ai-provid
 import type { AIAssistanceErrorCode, AIResult, AIResultKind, Settings } from '../domain/models';
 import { AIResultSchema, IdSchema } from '../domain/schemas';
 import type { ResearchRepository } from '../storage/repository';
-
-export const OLLAMA_PERMISSION_ORIGIN = 'http://127.0.0.1:11434/*';
+export { OLLAMA_PERMISSION_ORIGIN } from './local-ai-permissions';
 
 interface Preferences {
   get(): Promise<Settings>;
 }
 
 interface PermissionChecker {
-  contains(permissions: { origins: string[] }): Promise<boolean>;
+  has(): Promise<boolean>;
 }
 
 interface AIAssistanceDependencies {
@@ -48,7 +47,7 @@ export class AIAssistanceService {
     if (settings.ai.provider !== 'ollama') {
       throw new AIAssistanceError('AI_DISABLED', 'Local AI is disabled');
     }
-    if (!(await this.permissions.contains({ origins: [OLLAMA_PERMISSION_ORIGIN] }))) {
+    if (!(await this.permissions.has())) {
       throw new AIAssistanceError('AI_PERMISSION_REQUIRED', 'Local AI permission is required');
     }
     if (

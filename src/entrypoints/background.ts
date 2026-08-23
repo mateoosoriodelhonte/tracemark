@@ -8,6 +8,10 @@ import { CaptureService, createCaptureActions } from '../core/capture';
 import { HighlightService } from '../core/highlights';
 import { SearchService } from '../core/search';
 import { OllamaProvider } from '../core/ollama-provider';
+import {
+  createLocalAIPermissionManager,
+  type LocalAIPermissionApi,
+} from '../core/local-ai-permissions';
 import { createMessageRouter } from '../messaging/router';
 import { openTraceMarkDatabase } from '../storage/database';
 import { ResearchRepository } from '../storage/repository';
@@ -28,11 +32,15 @@ async function createServices() {
     disabled: new NoAIProvider(),
     ollama: new OllamaProvider({ fetch }),
   };
+  const localAIPermissions = createLocalAIPermissionManager(
+    browser.permissions as unknown as LocalAIPermissionApi,
+    import.meta.env.FIREFOX,
+  );
   const ai = new AIAssistanceService(
     repository,
     aiProviders.ollama,
     preferences,
-    { contains: (permissions) => browser.permissions.contains(permissions) },
+    localAIPermissions,
     dependencies,
   );
   const backups = new BackupService(repository, preferences, dependencies);
