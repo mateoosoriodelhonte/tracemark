@@ -9,6 +9,15 @@ cloud sync, or application backend.
 
 ![TraceMark research library with local-first controls and synthetic saved research](docs/images/tracemark-library.png)
 
+## Quick links
+
+- [Download or install TraceMark](#install-for-local-use)
+- [Save, search, mark, and back up research](#use-tracemark)
+- [Configure optional local AI](#optional-local-ai-with-ollama)
+- [Review browser limitations](#browser-limitations)
+- [Develop and test the extension](#development)
+- [Read the privacy, permission, and architecture documents](#privacy-permissions-and-architecture)
+
 ## What it does
 
 - Captures selected text with the page title, source URL, and nearby text context.
