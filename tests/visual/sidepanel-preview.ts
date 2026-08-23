@@ -22,7 +22,7 @@ const settings: Settings = {
   id: 'settings',
   schemaVersion: 1,
   theme: 'system',
-  ai: { provider: 'none', model: 'llama3.2' },
+  ai: { provider: 'ollama', model: 'llama3.2' },
 };
 const research: Highlight[] = [
   {
@@ -74,7 +74,24 @@ async function request(message: MessageRequest): Promise<MessageResponse> {
       settings.ai = { provider: message.provider, model: message.model };
       return { ok: true, data: settings };
     case 'ai.run':
-      return { ok: false, code: 'AI_DISABLED', message: 'Local AI is disabled' };
+      return {
+        ok: true,
+        data: {
+          id: '5d84d7d8-b47e-47b2-a44f-a25491ac9234',
+          schemaVersion: 1,
+          kind: message.kind,
+          provider: 'ollama',
+          sourceHighlightIds: message.sourceHighlightIds,
+          content:
+            message.kind === 'tags'
+              ? 'retrieval, evidence, evaluation'
+              : 'The selected notes emphasize preserving provenance while evaluating retrieval quality.',
+          ...(message.kind === 'tags'
+            ? { suggestedTags: ['retrieval', 'evidence', 'evaluation'] }
+            : {}),
+          createdAt: '2026-08-22T18:00:00.000Z',
+        },
+      };
     case 'collections.list':
       return { ok: true, data: [inbox, collection] };
     case 'research.search':
@@ -120,4 +137,11 @@ async function request(message: MessageRequest): Promise<MessageResponse> {
   }
 }
 
-mount(App, { target: document.getElementById('app')!, props: { request } });
+mount(App, {
+  target: document.getElementById('app')!,
+  props: {
+    request,
+    requestOllamaPermission: async () => true,
+    removeOllamaPermission: async () => true,
+  },
+});
