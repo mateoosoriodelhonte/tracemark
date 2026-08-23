@@ -47,8 +47,13 @@ describe.each(['chrome-mv3', 'firefox-mv3'] as const)('%s manifest', (target) =>
 
   test('offers Ollama only as an optional loopback host', () => {
     const manifest = readManifest(target);
+    const serializedManifest = JSON.stringify(manifest);
 
     expect(manifest.optional_host_permissions).toEqual(['http://127.0.0.1:11434/*']);
+    expect(manifest.host_permissions ?? []).not.toContain('http://127.0.0.1:11434/*');
+    expect(serializedManifest).not.toContain('localhost');
+    expect(serializedManifest).not.toContain('[::1]');
+    expect(serializedManifest).not.toContain('ollama.com');
   });
 
   test('declares the user-invoked save command', () => {

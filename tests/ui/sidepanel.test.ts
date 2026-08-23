@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/svelte';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import App from '../../src/entrypoints/sidepanel/App.svelte';
-import type { Settings } from '../../src/domain/models';
+import type { AIResult, Highlight, Settings } from '../../src/domain/models';
 import type { MessageRequest, MessageResponse } from '../../src/messaging/protocol';
 import { INBOX_ID, makeCollection, makeHighlight } from '../helpers/fixtures';
 
@@ -18,20 +18,38 @@ const hostileHighlight = makeHighlight({
   title: '<img src=x onerror=alert(1)>',
   quote: '<script>alert(1)</script>',
 });
+const secondHighlight = makeHighlight({
+  id: '95a521e9-0c6a-4a25-81a0-57b43ab704ac',
+  title: 'Notes on Evidence and Provenance',
+  quote: 'A durable research trail keeps each claim attached to its source.',
+  url: 'https://example.org/evidence',
+  canonicalUrl: 'https://example.org/evidence',
+  hostname: 'example.org',
+});
 const settings: Settings = {
   id: 'settings',
   schemaVersion: 1,
   theme: 'system',
   ai: { provider: 'none', model: 'llama3.2' },
 };
+const ollamaOrigin = 'http://127.0.0.1:11434/*';
 
-function libraryRequest() {
+function libraryRequest(
+  savedSettings: Settings = settings,
+  savedHighlights: Highlight[] = [hostileHighlight],
+  aiResult?: AIResult,
+) {
   return vi.fn(async (request: MessageRequest): Promise<MessageResponse> => {
     switch (request.type) {
       case 'settings.get':
-        return { ok: true, data: settings };
+        return { ok: true, data: savedSettings };
       case 'settings.theme.set':
-        return { ok: true, data: { ...settings, theme: request.theme } };
+        return { ok: true, data: { ...savedSettings, theme: request.theme } };
+      case 'settings.ai.set':
+        return {
+          ok: true,
+          data: { ...savedSettings, ai: { provider: request.provider, model: request.model } },
+        };
       case 'collections.list':
         return { ok: true, data: [inbox, collection] };
       case 'collections.create':
@@ -47,11 +65,11 @@ function libraryRequest() {
       case 'highlights.delete':
         return { ok: true, data: { status: 'deleted' } };
       case 'research.search':
-        return { ok: true, data: [hostileHighlight] };
+        return { ok: true, data: savedHighlights };
       case 'tags.list':
-        return { ok: true, data: hostileHighlight.tags };
+        return { ok: true, data: [...new Set(savedHighlights.flatMap(({ tags }) => tags))] };
       case 'highlights.update':
-        return { ok: true, data: { ...hostileHighlight, ...request.input } };
+        return { ok: true, data: { ...savedHighlights[0]!, ...request.input } };
       case 'anchors.apply':
         return { ok: true, data: { status: 'marked', count: 1 } };
       case 'backups.export':
@@ -81,6 +99,10 @@ function libraryRequest() {
         return { ok: false, code: 'NO_SELECTION', message: 'No selection' };
       case 'highlights.create':
         return { ok: true, data: hostileHighlight };
+      case 'ai.run':
+        return aiResult
+          ? { ok: true, data: aiResult }
+          : { ok: false, code: 'AI_DISABLED', message: 'Local AI is disabled' };
     }
     throw new Error('Unexpected library request');
   });
@@ -89,6 +111,384 @@ function libraryRequest() {
 afterEach(cleanup);
 
 describe('research library side panel', () => {
+  test('requests Ollama permission only after explicit consent and preserves disabled settings on denial', async () => {
+    const request = libraryRequest();
+    const requestOllamaPermission = vi.fn().mockResolvedValue(false);
+    render(App, { props: { request, requestOllamaPermission } });
+    await screen.findByText('<script>alert(1)</script>');
+
+    expect(requestOllamaPermission).not.toHaveBeenCalled();
+    expect(request).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'settings.ai.set' }));
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Enable local AI' }));
+
+    expect(requestOllamaPermission).toHaveBeenCalledOnce();
+    expect(requestOllamaPermission).toHaveBeenCalledWith([ollamaOrigin]);
+    expect(request).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'settings.ai.set' }));
+    expect(screen.getByRole('alert')).toHaveTextContent(/permission.*not granted/i);
+  });
+
+  test('enables the chosen local model without running AI', async () => {
+    const request = libraryRequest();
+    const requestOllamaPermission = vi.fn().mockResolvedValue(true);
+    render(App, { props: { request, requestOllamaPermission } });
+    await screen.findByText('<script>alert(1)</script>');
+
+    await fireEvent.input(screen.getByRole('textbox', { name: 'Ollama model' }), {
+      target: { value: 'qwen2.5:7b' },
+    });
+    await fireEvent.click(screen.getByRole('button', { name: 'Enable local AI' }));
+
+    await waitFor(() =>
+      expect(request).toHaveBeenCalledWith({
+        type: 'settings.ai.set',
+        provider: 'ollama',
+        model: 'qwen2.5:7b',
+      }),
+    );
+    expect(request).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'ai.run' }));
+  });
+
+  test('rejects an invalid model before requesting permission and restores the persisted model', async () => {
+    const request = libraryRequest();
+    const requestOllamaPermission = vi.fn().mockResolvedValue(true);
+    render(App, { props: { request, requestOllamaPermission } });
+    await screen.findByText('<script>alert(1)</script>');
+    const modelInput = screen.getByRole('textbox', { name: 'Ollama model' });
+
+    await fireEvent.input(modelInput, { target: { value: 'model name with spaces' } });
+    await fireEvent.click(screen.getByRole('button', { name: 'Enable local AI' }));
+
+    expect(requestOllamaPermission).not.toHaveBeenCalled();
+    expect(request).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'settings.ai.set' }));
+    expect(modelInput).toHaveValue('llama3.2');
+    expect(screen.getByRole('alert')).toHaveTextContent(/valid ollama model/i);
+  });
+
+  test('revokes newly granted permission when enabling settings cannot be persisted', async () => {
+    const baseRequest = libraryRequest();
+    const request = vi.fn((message: MessageRequest): Promise<MessageResponse> => {
+      if (message.type === 'settings.ai.set') {
+        return Promise.resolve({
+          ok: false,
+          code: 'INTERNAL_ERROR',
+          message: 'TraceMark could not save local AI settings.',
+        });
+      }
+      return baseRequest(message);
+    });
+    const requestOllamaPermission = vi.fn().mockResolvedValue(true);
+    const removeOllamaPermission = vi.fn().mockResolvedValue(true);
+    render(App, {
+      props: { request, requestOllamaPermission, removeOllamaPermission },
+    });
+    await screen.findByText('<script>alert(1)</script>');
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Enable local AI' }));
+
+    await waitFor(() => expect(removeOllamaPermission).toHaveBeenCalledWith([ollamaOrigin]));
+    expect(screen.getByText('Disabled')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Enable local AI' })).toBeInTheDocument();
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      /could not enable.*permission was removed/i,
+    );
+  });
+
+  test('retains a permission-removal retry after enable rollback fails', async () => {
+    const baseRequest = libraryRequest();
+    const request = vi.fn((message: MessageRequest): Promise<MessageResponse> => {
+      if (message.type === 'settings.ai.set') {
+        return Promise.resolve({
+          ok: false,
+          code: 'INTERNAL_ERROR',
+          message: 'TraceMark could not save local AI settings.',
+        });
+      }
+      return baseRequest(message);
+    });
+    const requestOllamaPermission = vi.fn().mockResolvedValue(true);
+    const removeOllamaPermission = vi.fn().mockResolvedValueOnce(false).mockResolvedValueOnce(true);
+    render(App, {
+      props: { request, requestOllamaPermission, removeOllamaPermission },
+    });
+    await screen.findByText('<script>alert(1)</script>');
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Enable local AI' }));
+    const retry = await screen.findByRole('button', { name: 'Retry permission removal' });
+
+    expect(screen.getByRole('alert')).toHaveTextContent(/permission could not be removed/i);
+    await fireEvent.click(retry);
+    await waitFor(() => expect(removeOllamaPermission).toHaveBeenCalledTimes(2));
+    await waitFor(() =>
+      expect(screen.queryByRole('button', { name: 'Retry permission removal' })).toBeNull(),
+    );
+    expect(screen.getByText('Disabled')).toBeInTheDocument();
+  });
+
+  test('disables AI before attempting to remove Ollama permission', async () => {
+    const request = libraryRequest({
+      ...settings,
+      ai: { provider: 'ollama', model: 'llama3.2' },
+    });
+    const removeOllamaPermission = vi.fn(async () => {
+      expect(request).toHaveBeenCalledWith({
+        type: 'settings.ai.set',
+        provider: 'none',
+        model: 'llama3.2',
+      });
+      throw new Error('Browser permission could not be removed.');
+    });
+    render(App, { props: { request, removeOllamaPermission } });
+    await screen.findByText('<script>alert(1)</script>');
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Disable local AI' }));
+
+    expect(removeOllamaPermission).toHaveBeenCalledWith([ollamaOrigin]);
+    expect(await screen.findByRole('alert')).toHaveTextContent(/permission could not be removed/i);
+    expect(screen.getByRole('button', { name: 'Enable local AI' })).toBeInTheDocument();
+  });
+
+  test('disables with the last persisted model after an invalid unsaved edit', async () => {
+    const request = libraryRequest({
+      ...settings,
+      ai: { provider: 'ollama', model: 'llama3.2' },
+    });
+    const removeOllamaPermission = vi.fn().mockResolvedValue(true);
+    render(App, { props: { request, removeOllamaPermission } });
+    await screen.findByText('<script>alert(1)</script>');
+    const modelInput = screen.getByRole('textbox', { name: 'Ollama model' });
+
+    await fireEvent.input(modelInput, { target: { value: 'invalid model name' } });
+    await fireEvent.click(screen.getByRole('button', { name: 'Disable local AI' }));
+
+    await waitFor(() =>
+      expect(request).toHaveBeenCalledWith({
+        type: 'settings.ai.set',
+        provider: 'none',
+        model: 'llama3.2',
+      }),
+    );
+    expect(modelInput).toHaveValue('llama3.2');
+  });
+
+  test('does not dispatch local AI while a disable mutation is pending', async () => {
+    const enabledSettings: Settings = {
+      ...settings,
+      ai: { provider: 'ollama', model: 'llama3.2' },
+    };
+    const baseRequest = libraryRequest(enabledSettings);
+    let finishDisable: (response: MessageResponse) => void = () => undefined;
+    const pendingDisable = new Promise<MessageResponse>((resolve) => {
+      finishDisable = resolve;
+    });
+    const request = vi.fn((message: MessageRequest): Promise<MessageResponse> => {
+      if (message.type === 'settings.ai.set' && message.provider === 'none') {
+        return pendingDisable;
+      }
+      return baseRequest(message);
+    });
+    const removeOllamaPermission = vi.fn().mockResolvedValue(true);
+    render(App, { props: { request, removeOllamaPermission } });
+    await screen.findByText('<script>alert(1)</script>');
+    await fireEvent.click(
+      screen.getByRole('checkbox', { name: `Select ${hostileHighlight.title}` }),
+    );
+    const summarize = screen.getByRole('button', { name: 'Summarize' });
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Disable local AI' }));
+    await fireEvent.click(summarize);
+
+    expect(request).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'ai.run' }));
+    expect(summarize).toBeDisabled();
+    finishDisable({
+      ok: true,
+      data: { ...enabledSettings, ai: { provider: 'none', model: 'llama3.2' } },
+    });
+    await screen.findByRole('button', { name: 'Enable local AI' });
+  });
+
+  test('runs one local task for exactly the checked research and renders hostile output as text', async () => {
+    const enabledSettings: Settings = {
+      ...settings,
+      ai: { provider: 'ollama', model: 'llama3.2' },
+    };
+    const generated: AIResult = {
+      id: '5d84d7d8-b47e-47b2-a44f-a25491ac9234',
+      schemaVersion: 1,
+      kind: 'tags',
+      provider: 'ollama',
+      sourceHighlightIds: [hostileHighlight.id, secondHighlight.id],
+      content: '<img src=x onerror=alert(1)>',
+      suggestedTags: ['evidence', 'review'],
+      createdAt: '2026-08-22T18:00:00.000Z',
+    };
+    const request = libraryRequest(enabledSettings, [hostileHighlight, secondHighlight], generated);
+    const { container } = render(App, { props: { request } });
+    await screen.findByText(secondHighlight.quote);
+
+    for (const name of ['Summarize', 'Explain', 'Suggest tags', 'Overview']) {
+      expect(screen.getByRole('button', { name })).toBeDisabled();
+    }
+    await fireEvent.click(
+      screen.getByRole('checkbox', { name: `Select ${hostileHighlight.title}` }),
+    );
+    await fireEvent.click(
+      screen.getByRole('checkbox', { name: `Select ${secondHighlight.title}` }),
+    );
+    expect(screen.getByText('2 selected')).toBeInTheDocument();
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Suggest tags' }));
+
+    await waitFor(() =>
+      expect(request).toHaveBeenCalledWith({
+        type: 'ai.run',
+        kind: 'tags',
+        sourceHighlightIds: [hostileHighlight.id, secondHighlight.id],
+      }),
+    );
+    const output = await screen.findByRole('region', {
+      name: 'Based on 2 selected quotations',
+    });
+    expect(within(output).getByText('<img src=x onerror=alert(1)>')).toBeInTheDocument();
+    expect(within(output).getByText('#evidence')).toBeInTheDocument();
+    expect(within(output).getByText('#review')).toBeInTheDocument();
+    expect(container.querySelector('img')).toBeNull();
+  });
+
+  test('clears checked research whenever search results reload', async () => {
+    const request = libraryRequest({ ...settings, ai: { provider: 'ollama', model: 'llama3.2' } }, [
+      hostileHighlight,
+      secondHighlight,
+    ]);
+    render(App, { props: { request } });
+    await screen.findByText(secondHighlight.quote);
+
+    await fireEvent.click(
+      screen.getByRole('checkbox', { name: `Select ${hostileHighlight.title}` }),
+    );
+    expect(screen.getByRole('button', { name: 'Summarize' })).toBeEnabled();
+    await fireEvent.input(screen.getByRole('searchbox', { name: 'Search research' }), {
+      target: { value: 'evidence' },
+    });
+    await fireEvent.submit(screen.getByRole('search'));
+
+    await waitFor(() =>
+      expect(
+        screen.getByRole('checkbox', { name: `Select ${hostileHighlight.title}` }),
+      ).not.toBeChecked(),
+    );
+    expect(screen.getByText('0 selected')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Summarize' })).toBeDisabled();
+  });
+
+  test('removes a deleted quotation from selection before the next local AI request', async () => {
+    const generated: AIResult = {
+      id: '5d84d7d8-b47e-47b2-a44f-a25491ac9234',
+      schemaVersion: 1,
+      kind: 'summary',
+      provider: 'ollama',
+      sourceHighlightIds: [secondHighlight.id],
+      content: 'A summary of the remaining visible quotation.',
+      createdAt: '2026-08-22T18:00:00.000Z',
+    };
+    const request = libraryRequest(
+      { ...settings, ai: { provider: 'ollama', model: 'llama3.2' } },
+      [hostileHighlight, secondHighlight],
+      generated,
+    );
+    render(App, { props: { request } });
+    await screen.findByText(secondHighlight.quote);
+
+    await fireEvent.click(
+      screen.getByRole('checkbox', { name: `Select ${hostileHighlight.title}` }),
+    );
+    await fireEvent.click(
+      screen.getByRole('checkbox', { name: `Select ${secondHighlight.title}` }),
+    );
+    await fireEvent.click(screen.getByRole('button', { name: `Edit ${hostileHighlight.title}` }));
+    const dialog = screen.getByRole('dialog', { name: 'Edit saved quotation' });
+    await fireEvent.click(within(dialog).getByRole('button', { name: 'Delete quotation' }));
+    await fireEvent.click(within(dialog).getByRole('button', { name: 'Confirm deletion' }));
+
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog', { name: 'Edit saved quotation' })).toBeNull(),
+    );
+    expect(screen.queryByRole('checkbox', { name: `Select ${hostileHighlight.title}` })).toBeNull();
+    expect(screen.getByRole('checkbox', { name: `Select ${secondHighlight.title}` })).toBeChecked();
+    expect(screen.getByText('1 selected')).toBeInTheDocument();
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Summarize' }));
+    await waitFor(() =>
+      expect(request).toHaveBeenCalledWith({
+        type: 'ai.run',
+        kind: 'summary',
+        sourceHighlightIds: [secondHighlight.id],
+      }),
+    );
+    expect(request).not.toHaveBeenCalledWith({
+      type: 'ai.run',
+      kind: 'summary',
+      sourceHighlightIds: [hostileHighlight.id, secondHighlight.id],
+    });
+  });
+
+  test('persists an edited enabled model without running AI', async () => {
+    const request = libraryRequest({
+      ...settings,
+      ai: { provider: 'ollama', model: 'llama3.2' },
+    });
+    render(App, { props: { request } });
+    await screen.findByText('<script>alert(1)</script>');
+
+    await fireEvent.change(screen.getByRole('textbox', { name: 'Ollama model' }), {
+      target: { value: 'mistral-nemo:latest' },
+    });
+
+    await waitFor(() =>
+      expect(request).toHaveBeenCalledWith({
+        type: 'settings.ai.set',
+        provider: 'ollama',
+        model: 'mistral-nemo:latest',
+      }),
+    );
+    expect(request).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'ai.run' }));
+  });
+
+  test('shows local task progress and safe errors without hiding the research library', async () => {
+    const baseRequest = libraryRequest({
+      ...settings,
+      ai: { provider: 'ollama', model: 'llama3.2' },
+    });
+    let finishAI: (response: MessageResponse) => void = () => undefined;
+    const pendingAI = new Promise<MessageResponse>((resolve) => {
+      finishAI = resolve;
+    });
+    const request = vi.fn((message: MessageRequest) =>
+      message.type === 'ai.run' ? pendingAI : baseRequest(message),
+    );
+    render(App, { props: { request } });
+    await screen.findByText('<script>alert(1)</script>');
+
+    await fireEvent.click(
+      screen.getByRole('checkbox', { name: `Select ${hostileHighlight.title}` }),
+    );
+    await fireEvent.click(screen.getByRole('button', { name: 'Summarize' }));
+
+    expect(await screen.findByText('Working locally…')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Summarize' })).toBeDisabled();
+    expect(screen.getByText('<script>alert(1)</script>')).toBeInTheDocument();
+
+    finishAI({
+      ok: false,
+      code: 'AI_UNAVAILABLE',
+      message: 'Ollama is not running on this device.',
+    });
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Ollama is not running on this device.',
+    );
+    expect(screen.getByText('<script>alert(1)</script>')).toBeInTheDocument();
+  });
+
   test('renders hostile research as text and loads local filters through typed requests', async () => {
     const request = libraryRequest();
     const { container } = render(App, { props: { request } });

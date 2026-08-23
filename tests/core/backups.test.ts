@@ -78,6 +78,176 @@ describe('BackupService', () => {
     expect(await preferences.get()).toEqual({ ...defaultSettings, theme: 'light' });
   });
 
+  test('round-trips structured suggested tags in persisted AI results', async () => {
+    await repository.putCollection(makeCollection());
+    await repository.putHighlight(makeHighlight());
+    const aiResult = {
+      id: generatedAiId,
+      schemaVersion: 1,
+      kind: 'tags' as const,
+      provider: 'ollama' as const,
+      sourceHighlightIds: [makeHighlight().id],
+      content: 'retrieval, evidence',
+      suggestedTags: ['retrieval', 'evidence'],
+      createdAt: fixedNow,
+    };
+    await repository.putAIResult(aiResult);
+    const exported = await service.exportJson();
+
+    await database.aiResults.clear();
+    await database.highlights.clear();
+    await database.collections.clear();
+    await service.importJson(exported.content, true);
+
+    expect(await repository.listAIResults()).toEqual([aiResult]);
+  });
+
+  test('exports an importable backup after deleting a highlight with dependent AI results', async () => {
+    await repository.putCollection(makeCollection());
+    const deletedHighlight = makeHighlight();
+    const retainedHighlight = makeHighlight({
+      id: '95a521e9-0c6a-4a25-81a0-57b43ab704ac',
+      quote: 'Retained research remains available after another quotation is deleted.',
+      createdAt: '2026-08-23T06:00:00.000Z',
+      updatedAt: '2026-08-23T06:00:00.000Z',
+    });
+    await repository.putHighlight(deletedHighlight);
+    await repository.putHighlight(retainedHighlight);
+    await repository.putAIResult({
+      id: generatedAiId,
+      schemaVersion: 1,
+      kind: 'overview',
+      provider: 'ollama',
+      sourceHighlightIds: [deletedHighlight.id, retainedHighlight.id],
+      content: 'This result depends on the quotation that will be deleted.',
+      createdAt: fixedNow,
+    });
+    const retainedAiResult = {
+      id: '5d84d7d8-b47e-47b2-a44f-a25491ac9234',
+      schemaVersion: 1 as const,
+      kind: 'summary' as const,
+      provider: 'ollama' as const,
+      sourceHighlightIds: [retainedHighlight.id],
+      content: 'This result only depends on retained research.',
+      createdAt: '2026-08-23T06:00:00.000Z',
+    };
+    await repository.putAIResult(retainedAiResult);
+
+    await repository.deleteHighlight(deletedHighlight.id);
+    const exported = await service.exportJson();
+
+    expect((await repository.listAIResults()).map(({ id }) => id)).toEqual([retainedAiResult.id]);
+    await database.aiResults.clear();
+    await database.highlights.clear();
+    await database.collections.clear();
+    await expect(service.importJson(exported.content, true)).resolves.toMatchObject({
+      highlights: 1,
+      aiResults: 1,
+    });
+    expect(await repository.listAIResults()).toEqual([retainedAiResult]);
+  });
+
+  test('keeps structurally different suggested-tag arrays as distinct AI results', async () => {
+    await repository.putCollection(makeCollection());
+    const highlight = makeHighlight();
+    await repository.putHighlight(highlight);
+    const exported = await service.exportJson();
+    const envelope = BackupEnvelopeSchema.parse(JSON.parse(exported.content));
+    const importedResult = {
+      id: '5d84d7d8-b47e-47b2-a44f-a25491ac9234',
+      schemaVersion: 1 as const,
+      kind: 'tags' as const,
+      provider: 'ollama' as const,
+      sourceHighlightIds: [highlight.id],
+      content: 'Shared rendered content.',
+      suggestedTags: ['a,b'],
+      createdAt: '2026-08-23T06:00:00.000Z',
+    };
+    envelope.aiResults.push(importedResult);
+    await repository.putAIResult({
+      ...importedResult,
+      id: generatedAiId,
+      suggestedTags: ['a', 'b'],
+      createdAt: fixedNow,
+    });
+
+    const result = await service.importJson(JSON.stringify(envelope), true);
+
+    expect(result.created.aiResults).toBe(1);
+    expect((await repository.listAIResults()).map(({ suggestedTags }) => suggestedTags)).toEqual(
+      expect.arrayContaining([['a', 'b'], ['a,b']]),
+    );
+  });
+
+  test('keeps different source-highlight orders as distinct AI results', async () => {
+    await repository.putCollection(makeCollection());
+    const firstHighlight = makeHighlight();
+    const secondHighlight = makeHighlight({
+      id: '95a521e9-0c6a-4a25-81a0-57b43ab704ac',
+      quote: 'A second source makes result ordering observable.',
+      createdAt: '2026-08-23T06:00:00.000Z',
+      updatedAt: '2026-08-23T06:00:00.000Z',
+    });
+    await repository.putHighlight(firstHighlight);
+    await repository.putHighlight(secondHighlight);
+    const exported = await service.exportJson();
+    const envelope = BackupEnvelopeSchema.parse(JSON.parse(exported.content));
+    const importedResult = {
+      id: '5d84d7d8-b47e-47b2-a44f-a25491ac9234',
+      schemaVersion: 1 as const,
+      kind: 'overview' as const,
+      provider: 'ollama' as const,
+      sourceHighlightIds: [secondHighlight.id, firstHighlight.id],
+      content: 'Shared content whose source order changes its meaning.',
+      createdAt: '2026-08-23T06:00:00.000Z',
+    };
+    envelope.aiResults.push(importedResult);
+    await repository.putAIResult({
+      ...importedResult,
+      id: generatedAiId,
+      sourceHighlightIds: [firstHighlight.id, secondHighlight.id],
+      createdAt: fixedNow,
+    });
+
+    const result = await service.importJson(JSON.stringify(envelope), true);
+
+    expect(result.created.aiResults).toBe(1);
+    expect(
+      (await repository.listAIResults()).map(({ sourceHighlightIds }) => sourceHighlightIds),
+    ).toEqual(
+      expect.arrayContaining([
+        [firstHighlight.id, secondHighlight.id],
+        [secondHighlight.id, firstHighlight.id],
+      ]),
+    );
+  });
+
+  test('rejects non-normalized duplicate suggested tags in backup input', async () => {
+    await repository.putCollection(makeCollection());
+    const highlight = makeHighlight();
+    await repository.putHighlight(highlight);
+    await repository.putAIResult({
+      id: '5d84d7d8-b47e-47b2-a44f-a25491ac9234',
+      schemaVersion: 1,
+      kind: 'tags',
+      provider: 'ollama',
+      sourceHighlightIds: [highlight.id],
+      content: 'rag',
+      suggestedTags: ['rag'],
+      createdAt: fixedNow,
+    });
+    const before = await service.exportJson();
+    const envelope = BackupEnvelopeSchema.parse(JSON.parse(before.content));
+    const importedResult = envelope.aiResults[0];
+    if (importedResult === undefined) throw new Error('Fixture backup has no AI result');
+    importedResult.suggestedTags = ['#RAG', 'rag'];
+
+    await expect(service.importJson(JSON.stringify(envelope), true)).rejects.toThrow(
+      'backup data is invalid',
+    );
+    expect(await service.exportJson()).toEqual(before);
+  });
+
   test('preserves unrelated local research and resolves conflicting IDs without duplicates', async () => {
     await repository.putCollection(makeCollection());
     await repository.putHighlight(makeHighlight());

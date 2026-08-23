@@ -1,4 +1,5 @@
 import { describe, expect, test, vi } from 'vitest';
+import { AIAssistanceError } from '../../src/core/ai-assistance';
 import { createMessageRouter } from '../../src/messaging/router';
 
 const capture = {
@@ -7,6 +8,18 @@ const capture = {
   suffix: ' after',
   title: 'Article',
   url: 'https://example.com/article',
+};
+
+const selectedHighlightId = '6f3f6066-69e2-48c0-9d55-f273a22a830e';
+
+const aiResult = {
+  id: '3a80e81a-4b11-464c-a329-a6ae7498a61d',
+  schemaVersion: 1 as const,
+  kind: 'summary' as const,
+  provider: 'ollama' as const,
+  sourceHighlightIds: [selectedHighlightId],
+  content: 'A concise summary.',
+  createdAt: '2026-08-22T06:00:00.000Z',
 };
 
 function services() {
@@ -31,6 +44,7 @@ function services() {
     search: { run: vi.fn().mockResolvedValue([]) },
     preferences: { get: vi.fn(), set: vi.fn() },
     backups: { exportJson: vi.fn(), exportMarkdown: vi.fn(), importJson: vi.fn() },
+    ai: { run: vi.fn().mockResolvedValue(aiResult) },
   };
 }
 
@@ -198,5 +212,114 @@ describe('message router', () => {
       ok: true,
       data: importResult,
     });
+  });
+
+  test('updates AI settings without changing the saved theme', async () => {
+    const dependencies = services();
+    const settings = {
+      id: 'settings' as const,
+      schemaVersion: 1 as const,
+      theme: 'dark' as const,
+      ai: { provider: 'none' as const, model: 'llama3.2' },
+    };
+    const updated = {
+      ...settings,
+      ai: { provider: 'ollama' as const, model: 'llama3.2:latest' },
+    };
+    dependencies.preferences.get.mockResolvedValue(settings);
+    dependencies.preferences.set.mockResolvedValue(updated);
+    const router = createMessageRouter(dependencies, 'tracemark-extension');
+
+    await expect(
+      router(
+        { type: 'settings.ai.set', provider: 'ollama', model: 'llama3.2:latest' },
+        { id: 'tracemark-extension' },
+      ),
+    ).resolves.toEqual({ ok: true, data: updated });
+
+    expect(dependencies.preferences.set).toHaveBeenCalledWith(updated);
+  });
+
+  test('runs an allowed AI task for exactly the selected highlights', async () => {
+    const dependencies = services();
+    const router = createMessageRouter(dependencies, 'tracemark-extension');
+
+    await expect(
+      router(
+        { type: 'ai.run', kind: 'summary', sourceHighlightIds: [selectedHighlightId] },
+        { id: 'tracemark-extension' },
+      ),
+    ).resolves.toEqual({ ok: true, data: aiResult });
+
+    expect(dependencies.ai.run).toHaveBeenCalledWith('summary', [selectedHighlightId]);
+  });
+
+  test('rejects malformed AI requests before dispatch', async () => {
+    const dependencies = services();
+    const router = createMessageRouter(dependencies, 'tracemark-extension');
+    const tooManyIds = Array.from(
+      { length: 21 },
+      (_, index) => `00000000-0000-4000-8000-${String(index).padStart(12, '0')}`,
+    );
+
+    for (const message of [
+      { type: 'ai.run', kind: 'summary', sourceHighlightIds: [] },
+      {
+        type: 'ai.run',
+        kind: 'summary',
+        sourceHighlightIds: [selectedHighlightId, selectedHighlightId],
+      },
+      { type: 'ai.run', kind: 'summary', sourceHighlightIds: tooManyIds },
+      { type: 'ai.run', kind: 'summary', sourceHighlightIds: ['not-an-id'] },
+      { type: 'ai.run', kind: 'summary', sourceHighlightIds: [selectedHighlightId], extra: true },
+      { type: 'settings.ai.set', provider: 'ollama', model: '   ' },
+      { type: 'settings.ai.set', provider: 'ollama', model: '<script>alert(1)</script>' },
+      { type: 'settings.ai.set', provider: 'ollama', model: 'llama3.2', extra: true },
+    ]) {
+      await expect(router(message, { id: 'tracemark-extension' })).resolves.toMatchObject({
+        ok: false,
+        code: 'INVALID_MESSAGE',
+      });
+    }
+
+    expect(dependencies.ai.run).not.toHaveBeenCalled();
+    expect(dependencies.preferences.get).not.toHaveBeenCalled();
+    expect(dependencies.preferences.set).not.toHaveBeenCalled();
+  });
+
+  test('rejects untrusted AI requests before dispatch', async () => {
+    const dependencies = services();
+    const router = createMessageRouter(dependencies, 'tracemark-extension');
+
+    await expect(
+      router(
+        { type: 'ai.run', kind: 'summary', sourceHighlightIds: [selectedHighlightId] },
+        { id: 'other-extension' },
+      ),
+    ).resolves.toMatchObject({ ok: false, code: 'UNTRUSTED_SENDER' });
+
+    expect(dependencies.ai.run).not.toHaveBeenCalled();
+  });
+
+  test.each([
+    'AI_DISABLED',
+    'AI_PERMISSION_REQUIRED',
+    'AI_UNAVAILABLE',
+    'AI_MODEL_UNAVAILABLE',
+    'AI_TIMEOUT',
+    'AI_INVALID_OUTPUT',
+    'NOT_FOUND',
+  ] as const)('maps %s to a safe typed response', async (code) => {
+    const dependencies = services();
+    dependencies.ai.run.mockRejectedValue(new AIAssistanceError(code, 'untrusted provider detail'));
+    const router = createMessageRouter(dependencies, 'tracemark-extension');
+
+    const response = await router(
+      { type: 'ai.run', kind: 'summary', sourceHighlightIds: [selectedHighlightId] },
+      { id: 'tracemark-extension' },
+    );
+
+    expect(response).toMatchObject({ ok: false, code });
+    expect(response).not.toMatchObject({ message: 'untrusted provider detail' });
   });
 });

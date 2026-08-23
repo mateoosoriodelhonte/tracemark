@@ -1,9 +1,17 @@
 <script lang="ts">
   import { onMount, tick } from 'svelte';
   import type { ZodType } from 'zod';
+  import { OLLAMA_PERMISSION_ORIGIN } from '../../core/ai-assistance';
   import { INBOX_COLLECTION_ID } from '../../domain/constants';
-  import type { Collection, Highlight, ThemePreference } from '../../domain/models';
+  import type {
+    AIResult,
+    AIResultKind,
+    Collection,
+    Highlight,
+    ThemePreference,
+  } from '../../domain/models';
   import {
+    AIResultSchema,
     AnchorRuntimeResultSchema,
     BackupExportSchema,
     BackupImportResultSchema,
@@ -14,19 +22,27 @@
   import { sendRequest } from '../../messaging/client';
   import {
     DeleteResultSchema,
+    ModelNameSchema,
     TagListSchema,
     type MessageRequest,
     type MessageResponse,
   } from '../../messaging/protocol';
 
   type Request = (message: MessageRequest) => Promise<MessageResponse>;
+  type PermissionAction = (origins: string[]) => Promise<boolean>;
   type DialogName = 'edit' | 'collections' | 'backup';
   const MAX_BACKUP_FILE_SIZE = 20_000_000;
   interface Props {
     request?: Request;
+    requestOllamaPermission?: PermissionAction;
+    removeOllamaPermission?: PermissionAction;
   }
 
-  let { request = sendRequest }: Props = $props();
+  let {
+    request = sendRequest,
+    requestOllamaPermission = (origins) => browser.permissions.request({ origins }),
+    removeOllamaPermission = (origins) => browser.permissions.remove({ origins }),
+  }: Props = $props();
   let highlights = $state<Highlight[]>([]);
   let collections = $state<Collection[]>([]);
   let knownTags = $state<string[]>([]);
@@ -38,6 +54,15 @@
   let phase = $state<'loading' | 'ready' | 'error'>('loading');
   let status = $state('Loading your local research…');
   let error = $state('');
+  let aiProvider = $state<'none' | 'ollama'>('none');
+  let aiModel = $state('llama3.2');
+  let persistedAIModel = $state('llama3.2');
+  let aiBusy = $state(false);
+  let aiError = $state('');
+  let aiTaskBusy = $state(false);
+  let aiResult = $state<AIResult>();
+  let permissionRemovalPending = $state(false);
+  let selectedHighlightIds = $state<string[]>([]);
   let activeDialog = $state<DialogName>();
   let returnFocus = $state<HTMLElement>();
   let dialogCloseButton = $state<HTMLButtonElement>();
@@ -91,6 +116,9 @@
         dataFor({ type: 'tags.list', limit: 500 }, TagListSchema),
       ]);
       theme = savedSettings.theme;
+      aiProvider = savedSettings.ai.provider;
+      aiModel = savedSettings.ai.model;
+      persistedAIModel = savedSettings.ai.model;
       collections = savedCollections;
       knownTags = savedTags;
       await loadResearch();
@@ -109,7 +137,12 @@
       includeArchived,
     };
     try {
-      highlights = await dataFor({ type: 'research.search', input }, HighlightSchema.array());
+      const loadedHighlights = await dataFor(
+        { type: 'research.search', input },
+        HighlightSchema.array(),
+      );
+      selectedHighlightIds = [];
+      highlights = loadedHighlights;
       knownTags = [...new Set([...knownTags, ...highlights.flatMap(({ tags }) => tags)])].sort(
         (left, right) => left.localeCompare(right),
       );
@@ -198,12 +231,14 @@
 
   async function deleteHighlight(): Promise<void> {
     if (!editing) return;
+    const deletedHighlightId = editing.id;
     try {
       await dataFor(
-        { type: 'highlights.delete', highlightId: editing.id, confirmed: true },
+        { type: 'highlights.delete', highlightId: deletedHighlightId, confirmed: true },
         DeleteResultSchema,
       );
-      highlights = highlights.filter(({ id }) => id !== editing?.id);
+      highlights = highlights.filter(({ id }) => id !== deletedHighlightId);
+      selectedHighlightIds = selectedHighlightIds.filter((id) => id !== deletedHighlightId);
       status = 'Deleted saved quotation.';
       closeDialog();
     } catch (deleteError) {
@@ -291,6 +326,172 @@
       status = `Theme set to ${theme}.`;
     } catch (themeError) {
       showError(themeError, 'TraceMark could not save this theme.');
+    }
+  }
+
+  async function enableLocalAI(): Promise<void> {
+    aiBusy = true;
+    aiError = '';
+    const model = ModelNameSchema.safeParse(aiModel);
+    if (!model.success) {
+      aiModel = persistedAIModel;
+      aiError = 'Enter a valid Ollama model name before enabling local AI.';
+      aiBusy = false;
+      return;
+    }
+    aiModel = model.data;
+
+    let granted: boolean;
+    try {
+      granted = await requestOllamaPermission([OLLAMA_PERMISSION_ORIGIN]);
+    } catch {
+      aiError = 'Ollama permission could not be requested. Local AI remains disabled.';
+      aiBusy = false;
+      return;
+    }
+    if (!granted) {
+      aiError = 'Ollama permission was not granted. Local AI remains disabled.';
+      aiBusy = false;
+      return;
+    }
+
+    try {
+      const saved = await dataFor(
+        { type: 'settings.ai.set', provider: 'ollama', model: model.data },
+        SettingsSchema,
+      );
+      aiProvider = saved.ai.provider;
+      aiModel = saved.ai.model;
+      persistedAIModel = saved.ai.model;
+      permissionRemovalPending = false;
+      status = 'Local AI enabled. Select research before asking for assistance.';
+    } catch {
+      aiProvider = 'none';
+      aiModel = persistedAIModel;
+      const removed = await tryRemoveOllamaPermission();
+      permissionRemovalPending = !removed;
+      aiError = removed
+        ? 'TraceMark could not enable local AI. Ollama permission was removed.'
+        : 'TraceMark could not enable local AI, and Ollama permission could not be removed. Retry permission removal.';
+    } finally {
+      aiBusy = false;
+    }
+  }
+
+  async function disableLocalAI(): Promise<void> {
+    aiBusy = true;
+    aiError = '';
+    try {
+      const saved = await dataFor(
+        { type: 'settings.ai.set', provider: 'none', model: persistedAIModel },
+        SettingsSchema,
+      );
+      aiProvider = saved.ai.provider;
+      aiModel = saved.ai.model;
+      persistedAIModel = saved.ai.model;
+    } catch (settingsError) {
+      aiModel = persistedAIModel;
+      aiError =
+        settingsError instanceof Error && settingsError.message.length > 0
+          ? settingsError.message
+          : 'TraceMark could not disable local AI.';
+      aiBusy = false;
+      return;
+    }
+
+    try {
+      const removed = await removeOllamaPermission([OLLAMA_PERMISSION_ORIGIN]);
+      permissionRemovalPending = !removed;
+      if (!removed) aiError = 'Ollama permission could not be removed in browser settings.';
+      else status = 'Local AI disabled and Ollama permission removed.';
+    } catch {
+      permissionRemovalPending = true;
+      aiError = 'Ollama permission could not be removed in browser settings.';
+    } finally {
+      aiBusy = false;
+    }
+  }
+
+  async function saveAIModel(model: string): Promise<void> {
+    if (aiProvider !== 'ollama') return;
+    aiBusy = true;
+    aiError = '';
+    const parsed = ModelNameSchema.safeParse(model);
+    if (!parsed.success) {
+      aiModel = persistedAIModel;
+      aiError = 'Enter a valid Ollama model name.';
+      aiBusy = false;
+      return;
+    }
+    try {
+      const saved = await dataFor(
+        { type: 'settings.ai.set', provider: 'ollama', model: parsed.data },
+        SettingsSchema,
+      );
+      aiModel = saved.ai.model;
+      persistedAIModel = saved.ai.model;
+      status = `Local AI model set to ${aiModel}.`;
+    } catch (modelError) {
+      aiModel = persistedAIModel;
+      aiError =
+        modelError instanceof Error && modelError.message.length > 0
+          ? modelError.message
+          : 'TraceMark could not save this Ollama model.';
+    } finally {
+      aiBusy = false;
+    }
+  }
+
+  async function tryRemoveOllamaPermission(): Promise<boolean> {
+    try {
+      return await removeOllamaPermission([OLLAMA_PERMISSION_ORIGIN]);
+    } catch {
+      return false;
+    }
+  }
+
+  async function retryOllamaPermissionRemoval(): Promise<void> {
+    aiBusy = true;
+    aiError = '';
+    try {
+      const removed = await tryRemoveOllamaPermission();
+      permissionRemovalPending = !removed;
+      if (removed) status = 'Ollama permission removed. Local AI remains disabled.';
+      else aiError = 'Ollama permission could not be removed in browser settings.';
+    } finally {
+      aiBusy = false;
+    }
+  }
+
+  function setSelected(highlightId: string, selected: boolean): void {
+    if (selected) {
+      if (selectedHighlightIds.length >= 20 || selectedHighlightIds.includes(highlightId)) return;
+      selectedHighlightIds = [...selectedHighlightIds, highlightId];
+      return;
+    }
+    selectedHighlightIds = selectedHighlightIds.filter((id) => id !== highlightId);
+  }
+
+  async function runLocalAI(kind: AIResultKind): Promise<void> {
+    if (aiProvider !== 'ollama' || aiBusy || aiTaskBusy) return;
+    const visibleHighlightIds = new Set(highlights.map(({ id }) => id));
+    const sourceHighlightIds = selectedHighlightIds.filter((id) => visibleHighlightIds.has(id));
+    if (sourceHighlightIds.length !== selectedHighlightIds.length) {
+      selectedHighlightIds = sourceHighlightIds;
+    }
+    if (sourceHighlightIds.length === 0) return;
+    aiTaskBusy = true;
+    aiError = '';
+    try {
+      aiResult = await dataFor({ type: 'ai.run', kind, sourceHighlightIds }, AIResultSchema);
+      status = `Generated local AI output from ${sourceHighlightIds.length.toLocaleString()} selected quotation${sourceHighlightIds.length === 1 ? '' : 's'}.`;
+    } catch (assistanceError) {
+      aiError =
+        assistanceError instanceof Error && assistanceError.message.length > 0
+          ? assistanceError.message
+          : 'TraceMark could not generate local AI assistance.';
+    } finally {
+      aiTaskBusy = false;
     }
   }
 
@@ -425,6 +626,113 @@
       </div>
     </section>
 
+    <section class="ai-panel" aria-labelledby="local-ai-heading">
+      <div class="ai-panel-heading">
+        <div>
+          <p class="kicker">Optional · private by default</p>
+          <h2 id="local-ai-heading">Local AI</h2>
+        </div>
+        <span class:enabled={aiProvider === 'ollama'} class="ai-state"
+          >{aiProvider === 'ollama' ? 'Enabled' : 'Disabled'}</span
+        >
+      </div>
+      <p class="ai-explanation">
+        {#if aiProvider === 'ollama'}
+          Assistance uses your selected research and the Ollama model running on this device.
+        {:else}
+          Enabling grants access only to <code>127.0.0.1:11434</code>. It does not start Ollama,
+          download models, or contact a cloud service.
+        {/if}
+      </p>
+      <div class="ai-settings">
+        <label
+          ><span>Ollama model</span><input
+            bind:value={aiModel}
+            autocomplete="off"
+            onchange={(event) => void saveAIModel(event.currentTarget.value)}
+          /></label
+        >
+        {#if aiProvider === 'ollama'}
+          <button
+            type="button"
+            class="quiet-button"
+            disabled={aiBusy}
+            onclick={() => void disableLocalAI()}>Disable local AI</button
+          >
+        {:else}
+          <button
+            type="button"
+            class="primary-button"
+            disabled={aiBusy || phase === 'loading' || !aiModel.trim()}
+            onclick={() => void enableLocalAI()}>Enable local AI</button
+          >
+        {/if}
+        {#if permissionRemovalPending}
+          <button
+            type="button"
+            class="quiet-button"
+            disabled={aiBusy}
+            onclick={() => void retryOllamaPermissionRemoval()}>Retry permission removal</button
+          >
+        {/if}
+      </div>
+      {#if aiProvider === 'ollama'}
+        <div class="ai-actions">
+          <p role="status" aria-live="polite">
+            {selectedHighlightIds.length.toLocaleString()} selected
+          </p>
+          <div class="button-grid" aria-label="Local AI actions">
+            <button
+              type="button"
+              class="quiet-button"
+              disabled={selectedHighlightIds.length === 0 || aiBusy || aiTaskBusy}
+              onclick={() => void runLocalAI('summary')}>Summarize</button
+            >
+            <button
+              type="button"
+              class="quiet-button"
+              disabled={selectedHighlightIds.length === 0 || aiBusy || aiTaskBusy}
+              onclick={() => void runLocalAI('explanation')}>Explain</button
+            >
+            <button
+              type="button"
+              class="quiet-button"
+              disabled={selectedHighlightIds.length === 0 || aiBusy || aiTaskBusy}
+              onclick={() => void runLocalAI('tags')}>Suggest tags</button
+            >
+            <button
+              type="button"
+              class="quiet-button"
+              disabled={selectedHighlightIds.length === 0 || aiBusy || aiTaskBusy}
+              onclick={() => void runLocalAI('overview')}>Overview</button
+            >
+          </div>
+          {#if aiTaskBusy}<p class="ai-progress" role="status">Working locally…</p>{/if}
+        </div>
+        {#if aiResult}
+          <section class="ai-result" aria-labelledby="local-ai-result-heading">
+            <div>
+              <p class="eyebrow">Local AI output</p>
+              <h3 id="local-ai-result-heading">
+                Based on {aiResult.sourceHighlightIds.length.toLocaleString()} selected quotation{aiResult
+                  .sourceHighlightIds.length === 1
+                  ? ''
+                  : 's'}
+              </h3>
+            </div>
+            <p class="ai-result-content">{aiResult.content}</p>
+            {#if aiResult.suggestedTags}
+              <div class="chips suggested-tags" aria-label="Suggested tags">
+                {#each aiResult.suggestedTags as tag (tag)}<span>#{tag}</span>{/each}
+              </div>
+              <p class="ai-result-note">Suggestions are not applied automatically.</p>
+            {/if}
+          </section>
+        {/if}
+      {/if}
+      {#if aiError}<p class="ai-error" role="alert">{aiError}</p>{/if}
+    </section>
+
     <form
       class="search-panel"
       role="search"
@@ -514,6 +822,18 @@
       <section class="research-list" aria-label="Saved quotations">
         {#each highlights as highlight (highlight.id)}
           <article class="research-card">
+            <label class="card-select">
+              <input
+                type="checkbox"
+                aria-label={`Select ${highlight.title}`}
+                checked={selectedHighlightIds.includes(highlight.id)}
+                disabled={selectedHighlightIds.length >= 20 &&
+                  !selectedHighlightIds.includes(highlight.id)}
+                onchange={(event) =>
+                  setSelected(highlight.id, (event.currentTarget as HTMLInputElement).checked)}
+              />
+              <span aria-hidden="true">Select</span>
+            </label>
             <div class="card-meta">
               <span class="source-host">{highlight.hostname}</span><span aria-hidden="true">·</span>
               <time datetime={highlight.createdAt}
@@ -1053,6 +1373,109 @@
     box-shadow: 0 8px 28px rgb(23 49 47 / 7%);
   }
 
+  .ai-panel {
+    display: grid;
+    gap: 10px;
+    margin-bottom: 16px;
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 14px;
+    background: var(--surface);
+  }
+
+  .ai-panel-heading,
+  .ai-settings {
+    display: flex;
+    align-items: end;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  .ai-panel-heading h2 {
+    margin: 3px 0 0;
+    font-family: Georgia, 'Times New Roman', serif;
+    font-size: 1.08rem;
+  }
+
+  .ai-state {
+    border-radius: 999px;
+    padding: 4px 8px;
+    color: var(--muted);
+    background: var(--subtle);
+    font-size: 0.68rem;
+    font-weight: 800;
+  }
+
+  .ai-state.enabled {
+    color: var(--accent-strong);
+    background: var(--accent-soft);
+  }
+
+  .ai-explanation,
+  .ai-error {
+    margin: 0;
+    color: var(--muted);
+    font-size: 0.78rem;
+    line-height: 1.45;
+  }
+
+  .ai-explanation code {
+    color: var(--text);
+  }
+
+  .ai-settings label {
+    flex: 1;
+  }
+
+  .ai-error {
+    color: var(--danger);
+    font-weight: 700;
+  }
+
+  .ai-actions {
+    display: grid;
+    gap: 8px;
+    border-top: 1px solid var(--subtle);
+    padding-top: 10px;
+  }
+
+  .ai-actions > p,
+  .ai-result-note {
+    margin: 0;
+    color: var(--muted);
+    font-size: 0.72rem;
+  }
+
+  .ai-result {
+    display: grid;
+    gap: 9px;
+    border-left: 3px solid var(--accent);
+    border-radius: 8px;
+    padding: 12px;
+    background: var(--raised);
+  }
+
+  .ai-result h3 {
+    margin: 3px 0 0;
+    font-size: 0.82rem;
+  }
+
+  .ai-result-content {
+    margin: 0;
+    font-family: Georgia, 'Times New Roman', serif;
+    line-height: 1.5;
+    white-space: pre-wrap;
+  }
+
+  .suggested-tags {
+    margin-bottom: 0;
+  }
+
+  .ai-progress {
+    color: var(--accent);
+    font-weight: 700;
+  }
+
   .input-wrap {
     position: relative;
   }
@@ -1133,7 +1556,25 @@
     content: '';
   }
 
+  .card-select {
+    position: absolute;
+    top: 13px;
+    right: 13px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--muted);
+    font-size: 0.7rem;
+  }
+
+  .card-select input {
+    width: 17px;
+    min-height: 17px;
+    accent-color: var(--accent-strong);
+  }
+
   .card-meta {
+    padding-right: 72px;
     gap: 7px;
     color: var(--muted);
     font-size: 0.7rem;
@@ -1417,9 +1858,14 @@
   @media (max-width: 520px) {
     .topbar,
     .intro,
-    .result-bar {
+    .result-bar,
+    .ai-settings {
       align-items: start;
       flex-wrap: wrap;
+    }
+
+    .ai-settings {
+      flex-direction: column;
     }
 
     .filters,

@@ -1,10 +1,13 @@
 import { CollectionService } from '../core/collections';
 import { AnchorService } from '../core/anchor';
+import { AIAssistanceService } from '../core/ai-assistance';
+import { NoAIProvider } from '../core/ai-provider';
 import { BackupService } from '../core/backups';
 import { createBackgroundHandlers, CAPTURE_MENU_ID } from '../core/background-controller';
 import { CaptureService, createCaptureActions } from '../core/capture';
 import { HighlightService } from '../core/highlights';
 import { SearchService } from '../core/search';
+import { OllamaProvider } from '../core/ollama-provider';
 import { createMessageRouter } from '../messaging/router';
 import { openTraceMarkDatabase } from '../storage/database';
 import { ResearchRepository } from '../storage/repository';
@@ -21,6 +24,17 @@ async function createServices() {
   const collections = new CollectionService(repository, dependencies);
   const search = new SearchService(repository);
   const preferences = new PreferencesStore(browser.storage.local);
+  const aiProviders = {
+    disabled: new NoAIProvider(),
+    ollama: new OllamaProvider({ fetch }),
+  };
+  const ai = new AIAssistanceService(
+    repository,
+    aiProviders.ollama,
+    preferences,
+    { contains: (permissions) => browser.permissions.contains(permissions) },
+    dependencies,
+  );
   const backups = new BackupService(repository, preferences, dependencies);
   const capture = new CaptureService({
     executeScript: async ({ target, files }) => {
@@ -42,7 +56,7 @@ async function createServices() {
   });
   const captureActions = createCaptureActions(capture, highlights);
   const router = createMessageRouter(
-    { capture, highlights, collections, anchors, search, preferences, backups },
+    { capture, highlights, collections, anchors, search, preferences, backups, ai },
     browser.runtime.id,
   );
 

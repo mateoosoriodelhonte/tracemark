@@ -1,5 +1,5 @@
-import type { Collection, Highlight } from '../domain/models';
-import { CollectionSchema, HighlightSchema, TagSchema } from '../domain/schemas';
+import type { AIResult, Collection, Highlight } from '../domain/models';
+import { AIResultSchema, CollectionSchema, HighlightSchema, TagSchema } from '../domain/schemas';
 import type { TraceMarkDatabase } from './database';
 
 export class ResearchRepository {
@@ -37,8 +37,27 @@ export class ResearchRepository {
     return keys.map((key) => TagSchema.parse(key));
   }
 
+  async putAIResult(input: unknown): Promise<AIResult> {
+    const result = AIResultSchema.parse(input);
+    await this.database.aiResults.put(result);
+    return AIResultSchema.parse(result);
+  }
+
+  async listAIResults(): Promise<AIResult[]> {
+    const results = await this.database.aiResults.orderBy('createdAt').reverse().toArray();
+    return results.map((result) => AIResultSchema.parse(result));
+  }
+
   async deleteHighlight(id: string): Promise<void> {
-    await this.database.highlights.delete(id);
+    await this.database.transaction(
+      'rw',
+      this.database.highlights,
+      this.database.aiResults,
+      async () => {
+        await this.database.aiResults.where('sourceHighlightIds').equals(id).delete();
+        await this.database.highlights.delete(id);
+      },
+    );
   }
 
   async putCollection(input: unknown): Promise<Collection> {

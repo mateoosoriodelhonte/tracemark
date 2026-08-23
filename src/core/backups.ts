@@ -131,12 +131,13 @@ function highlightIdentity(highlight: Pick<Highlight, 'url' | 'quote'>): string 
 }
 
 function aiIdentity(result: AIResult): string {
-  return [
+  return JSON.stringify([
     result.kind,
     result.provider,
-    [...result.sourceHighlightIds].sort().join(','),
+    result.sourceHighlightIds,
     result.content,
-  ].join('\u0000');
+    result.suggestedTags ?? null,
+  ]);
 }
 
 export class BackupService {

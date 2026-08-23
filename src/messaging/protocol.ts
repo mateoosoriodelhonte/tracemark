@@ -1,6 +1,7 @@
 import { z } from 'zod';
-import type { Collection, Highlight, Settings } from '../domain/models';
+import type { AIResult, Collection, Highlight, Settings } from '../domain/models';
 import {
+  AIResultSchema,
   AnchorRuntimeResultSchema,
   BackupExportSchema,
   BackupImportResultSchema,
@@ -54,6 +55,19 @@ export const TagListSchema = z
   .max(500)
   .refine((tags) => new Set(tags).size === tags.length, 'Tags must be distinct');
 
+export const ModelNameSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(200)
+  .regex(/^[A-Za-z0-9._:/-]+$/u, 'Model names contain unsupported characters');
+
+export const SourceHighlightIdsSchema = z
+  .array(IdSchema)
+  .min(1)
+  .max(20)
+  .refine((ids) => new Set(ids).size === ids.length, 'Source highlight IDs must be distinct');
+
 export const RequestSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('capture.current') }).strict(),
   CreateHighlightRequestSchema,
@@ -102,6 +116,20 @@ export const RequestSchema = z.discriminatedUnion('type', [
     .strict(),
   z
     .object({
+      type: z.literal('settings.ai.set'),
+      provider: z.enum(['none', 'ollama']),
+      model: ModelNameSchema,
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal('ai.run'),
+      kind: z.enum(['summary', 'explanation', 'tags', 'overview']),
+      sourceHighlightIds: SourceHighlightIdsSchema,
+    })
+    .strict(),
+  z
+    .object({
       type: z.literal('backups.export'),
       format: z.enum(['json', 'markdown']),
       collectionId: IdSchema.optional(),
@@ -128,6 +156,12 @@ export const ErrorCodeSchema = z.enum([
   'INVALID_ANCHOR_RESULT',
   'NOT_FOUND',
   'INVALID_BACKUP',
+  'AI_DISABLED',
+  'AI_PERMISSION_REQUIRED',
+  'AI_UNAVAILABLE',
+  'AI_MODEL_UNAVAILABLE',
+  'AI_TIMEOUT',
+  'AI_INVALID_OUTPUT',
   'INTERNAL_ERROR',
 ]);
 
@@ -147,6 +181,7 @@ export const ResponseSchema = z.discriminatedUnion('ok', [
         BackupExportSchema,
         BackupImportResultSchema,
         DeleteResultSchema,
+        AIResultSchema,
       ]),
     })
     .strict(),
@@ -168,6 +203,7 @@ export type SuccessfulResponseData =
   | Collection[]
   | Collection
   | Settings
+  | AIResult
   | z.infer<typeof CaptureResultSchema>
   | z.infer<typeof AnchorRuntimeResultSchema>
   | z.infer<typeof BackupExportSchema>
