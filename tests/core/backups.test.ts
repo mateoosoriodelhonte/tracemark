@@ -78,6 +78,30 @@ describe('BackupService', () => {
     expect(await preferences.get()).toEqual({ ...defaultSettings, theme: 'light' });
   });
 
+  test('round-trips structured suggested tags in persisted AI results', async () => {
+    await repository.putCollection(makeCollection());
+    await repository.putHighlight(makeHighlight());
+    const aiResult = {
+      id: generatedAiId,
+      schemaVersion: 1,
+      kind: 'tags' as const,
+      provider: 'ollama' as const,
+      sourceHighlightIds: [makeHighlight().id],
+      content: 'retrieval, evidence',
+      suggestedTags: ['retrieval', 'evidence'],
+      createdAt: fixedNow,
+    };
+    await repository.putAIResult(aiResult);
+    const exported = await service.exportJson();
+
+    await database.aiResults.clear();
+    await database.highlights.clear();
+    await database.collections.clear();
+    await service.importJson(exported.content, true);
+
+    expect(await repository.listAIResults()).toEqual([aiResult]);
+  });
+
   test('preserves unrelated local research and resolves conflicting IDs without duplicates', async () => {
     await repository.putCollection(makeCollection());
     await repository.putHighlight(makeHighlight());

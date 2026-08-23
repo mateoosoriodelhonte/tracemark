@@ -72,4 +72,29 @@ describe('ResearchRepository', () => {
     ]);
     expect(await repository.listTags(2)).toEqual(['evidence', 'rag']);
   });
+
+  test('validates AI results before writing and returns immutable validated records', async () => {
+    const repository = await createRepository();
+    const result = {
+      id: '3a80e81a-4b11-464c-a329-a6ae7498a61d',
+      schemaVersion: 1,
+      kind: 'tags' as const,
+      provider: 'ollama' as const,
+      sourceHighlightIds: [makeHighlight().id],
+      content: 'retrieval, evidence',
+      suggestedTags: ['retrieval', 'evidence'],
+      createdAt: '2026-08-22T06:00:00.000Z',
+    };
+
+    await repository.putAIResult(result);
+    result.suggestedTags.push('mutated-after-save');
+
+    expect(await repository.listAIResults()).toEqual([
+      {
+        ...result,
+        suggestedTags: ['retrieval', 'evidence'],
+      },
+    ]);
+    await expect(repository.putAIResult({ ...result, content: '' })).rejects.toThrow();
+  });
 });

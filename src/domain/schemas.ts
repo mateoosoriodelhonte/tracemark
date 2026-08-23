@@ -108,6 +108,7 @@ export const AIResultSchema = z
     provider: z.literal('ollama'),
     sourceHighlightIds: z.array(IdSchema).min(1).max(500),
     content: z.string().min(1).max(100_000),
+    suggestedTags: z.array(TagSchema).min(1).max(MAX_TAGS).optional(),
     createdAt: TimestampSchema,
   })
   .strict();
