@@ -70,6 +70,11 @@ async function request(message: MessageRequest): Promise<MessageResponse> {
     case 'settings.theme.set':
       settings.theme = message.theme;
       return { ok: true, data: settings };
+    case 'settings.ai.set':
+      settings.ai = { provider: message.provider, model: message.model };
+      return { ok: true, data: settings };
+    case 'ai.run':
+      return { ok: false, code: 'AI_DISABLED', message: 'Local AI is disabled' };
     case 'collections.list':
       return { ok: true, data: [inbox, collection] };
     case 'research.search':

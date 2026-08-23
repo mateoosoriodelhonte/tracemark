@@ -1,4 +1,5 @@
 import type { Highlight } from '../domain/models';
+import { AIAssistanceError, type AIAssistanceService } from '../core/ai-assistance';
 import { AnchorError } from '../core/anchor';
 import type { AnchorService } from '../core/anchor';
 import { BackupError, type BackupService } from '../core/backups';
@@ -29,6 +30,7 @@ export interface RouterServices {
   search: Pick<SearchService, 'run'>;
   preferences: Pick<PreferencesStore, 'get' | 'set'>;
   backups: Pick<BackupService, 'exportJson' | 'exportMarkdown' | 'importJson'>;
+  ai: Pick<AIAssistanceService, 'run'>;
 }
 
 type ErrorCode = Extract<MessageResponse, { ok: false }>['code'];
@@ -36,6 +38,16 @@ type ErrorCode = Extract<MessageResponse, { ok: false }>['code'];
 function errorResponse(code: ErrorCode, message: string): MessageResponse {
   return ResponseSchema.parse({ ok: false, code, message });
 }
+
+const AI_ERROR_MESSAGES = {
+  AI_DISABLED: 'Local AI is disabled',
+  AI_PERMISSION_REQUIRED: 'Local AI permission is required',
+  AI_UNAVAILABLE: 'Local AI is unavailable',
+  AI_MODEL_UNAVAILABLE: 'The selected local AI model is unavailable',
+  AI_TIMEOUT: 'Local AI did not respond in time',
+  AI_INVALID_OUTPUT: 'Local AI returned invalid output',
+  NOT_FOUND: 'Selected research was not found',
+} as const;
 
 export function createMessageRouter(services: RouterServices, runtimeId: string) {
   return async (message: unknown, sender: MessageSenderLike): Promise<MessageResponse> => {
@@ -125,6 +137,21 @@ export function createMessageRouter(services: RouterServices, runtimeId: string)
             data: await services.preferences.set({ ...settings, theme: request.data.theme }),
           });
         }
+        case 'settings.ai.set': {
+          const settings = await services.preferences.get();
+          return ResponseSchema.parse({
+            ok: true,
+            data: await services.preferences.set({
+              ...settings,
+              ai: { provider: request.data.provider, model: request.data.model },
+            }),
+          });
+        }
+        case 'ai.run':
+          return ResponseSchema.parse({
+            ok: true,
+            data: await services.ai.run(request.data.kind, request.data.sourceHighlightIds),
+          });
         case 'backups.export':
           return ResponseSchema.parse({
             ok: true,
@@ -143,6 +170,9 @@ export function createMessageRouter(services: RouterServices, runtimeId: string)
       if (error instanceof CaptureError) return errorResponse(error.code, error.message);
       if (error instanceof AnchorError) return errorResponse(error.code, error.message);
       if (error instanceof BackupError) return errorResponse('INVALID_BACKUP', error.message);
+      if (error instanceof AIAssistanceError) {
+        return errorResponse(error.code, AI_ERROR_MESSAGES[error.code]);
+      }
       return errorResponse('INTERNAL_ERROR', 'TraceMark could not complete the request');
     }
   };
