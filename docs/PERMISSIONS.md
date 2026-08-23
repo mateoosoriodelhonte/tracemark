@@ -29,6 +29,20 @@ Firefox also declares required data collection `none` and optional built-in data
 `websiteContent` and `browsingActivity`. Those data types are not host permissions and are not
 granted at installation.
 
+## Browser comparison
+
+| Capability                 | Chrome                                                          | Firefox                                                                              |
+| -------------------------- | --------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| Temporary webpage access   | `activeTab` after a toolbar, context-menu, or command gesture   | `activeTab` after a toolbar, context-menu, or command gesture                        |
+| Runtime script injection   | Required `scripting`; no static content script                  | Required `scripting`; no static content script                                       |
+| Research-library surface   | Required `sidePanel` permission and `side_panel` manifest entry | Generated `sidebar_action` manifest entry; no Chrome `sidePanel` permission          |
+| Optional Ollama origin     | Requested from **Enable local AI**                              | Requested from **Continue enabling local AI** after the data-consent step            |
+| Built-in data consent      | Not applicable                                                  | Optional `websiteContent` and `browsingActivity`; required data collection is `none` |
+| Static website host access | None                                                            | None                                                                                 |
+
+The comparison describes generated package manifests, not just source configuration. Manifest and
+archive tests fail if either browser gains a broader permission surface.
+
 ## Why each permission exists
 
 | Permission     | Browser            | Use and boundary                                                                                                                                                             |
