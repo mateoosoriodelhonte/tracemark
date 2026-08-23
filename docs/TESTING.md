@@ -23,19 +23,59 @@ on macOS arm64. The Firefox test also works with `FIREFOX_BIN` set to an explici
 
 | Evidence                                                         | Command                                                                 |
 | ---------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| Complete reproducible quality and package gate                   | `pnpm check`                                                            |
 | Unit, component, storage, and browser-agnostic integration tests | `pnpm test`                                                             |
 | Generated Chrome and Firefox manifest checks                     | `pnpm check:manifests`                                                  |
 | Release ZIP contract                                             | `pnpm package:build && pnpm test:e2e:packages && pnpm package:validate` |
+| Browser archive checksums                                        | `pnpm package:checksums`                                                |
+| Tracked relative Markdown links                                  | `pnpm docs:links`                                                       |
+| Deterministic store assets                                       | `pnpm screenshots && pnpm screenshots:check`                            |
 | Packaged Chromium                                                | `pnpm test:e2e:chromium`                                                |
 | Packaged Firefox, normal local run                               | `pnpm test:e2e:firefox`                                                 |
 | Packaged Firefox, strict release run                             | `pnpm test:e2e:firefox:release`                                         |
 
 `pnpm check` is the repository quality gate. It runs formatting verification, lint, type checking,
-both production builds, the full Vitest suite, and `web-ext lint` against the generated Firefox
-directory. On a clean checkout, run `pnpm package:build && pnpm check` because the Vitest suite's
-release-contract tests expect both generated ZIPs. Packaged Chromium and Firefox execution remain
-separate because they require installed browsers and, for Firefox, a compatible WebDriver
-environment.
+both production package builds, the full Vitest suite, release-package validation, browser-archive
+checksum creation, `web-ext lint` against the generated Firefox directory, tracked relative-link
+validation, and screenshot validation. It creates the exact required ZIPs before any ZIP-dependent
+test, so `pnpm check` is self-sufficient when `.output` contains no prior archives. Packaged Chromium
+and Firefox execution remain separate because they require installed browsers and, for Firefox, a
+compatible WebDriver environment.
+
+## Recorded v1.0.0 release gate
+
+The local release gate was recorded on 2026-08-22 on macOS arm64 with Node.js 26.0.0, pnpm 11.19.0,
+Playwright 1.62.1, Firefox 154.0, and geckodriver 0.37.1. Generated archives were removed before
+`pnpm check` to rule out a stale-artifact pass.
+
+| Evidence                      | Recorded result                                                                                                              |
+| ----------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| Archive-free `pnpm check`     | 31 Vitest files and 245 tests passed; format, lint, typecheck, package validation, checksums, links, and screenshots passed. |
+| Packaged Chromium             | 2 Playwright tests passed against a fresh profile and the real unpacked Chrome MV3 build.                                    |
+| Packaged Firefox strict run   | Firefox 154.0 temporarily installed the exact Firefox ZIP; packaged manifest, startup, library, edit, and exports passed.    |
+| Deterministic store assets    | All 4 assets regenerated and then passed structural/dimension check mode.                                                    |
+| `web-ext lint`                | 0 errors, 0 notices, and 1 warning in WXT's generated Svelte client chunk for dynamic `innerHTML` assignment.                |
+| Documentation and secret gate | All tracked relative Markdown links resolved; the tracked-file secret-pattern scan reported no release-source matches.       |
+
+The final browser release inventory is:
+
+| File                                   | Bytes   | SHA-256                                                                                          |
+| -------------------------------------- | ------- | ------------------------------------------------------------------------------------------------ |
+| `tracemark-1.0.0-chrome.zip`           | 166,576 | `5b0d3e22ff6de521190711ec8834a92d7f026e8399f6c9c7ad1eeef026fa2bd9`                               |
+| `tracemark-1.0.0-firefox.zip`          | 166,711 | `5e085ff5be7b7bad982a57c93bc5882f6514fa3d76f426b952158e7a42fd2043`                               |
+| `SHA256SUMS`                           | 187     | Contains the two sorted lowercase browser-archive records above.                                 |
+| `tracemark-1.0.0-sources.zip` (review) | —       | Generated for Mozilla source review; intentionally excluded from the release checksum inventory. |
+
+An immediate second build produced the same Chrome and Firefox SHA-256 values. Both built manifests
+declare Manifest V3 and version `1.0.0`; the archive names exactly match the table.
+
+GitHub Actions repeats the frozen-lockfile source gate on Node.js 24, runs packaged Chromium with
+Playwright's Chromium system dependencies in a dedicated job, then independently rebuilds and
+validates the three ZIPs, checks the browser checksums, scans tracked release source for secret
+patterns without printing matched contents, checks screenshots, inspects ZIP listings, and uploads
+the three ZIPs plus `SHA256SUMS`. Strict Firefox WebDriver execution remains a local release gate;
+the native browser gestures listed below remain manual checks in both browsers and are not claimed
+by CI.
 
 The normal Firefox command fails when Firefox or WebDriver cannot start. A developer who knowingly
 lacks that local prerequisite may opt into a clearly reported skip with:

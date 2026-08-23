@@ -14,9 +14,9 @@ concurrency:
 
 jobs:
   verify:
-    name: Verify extension
+    name: Verify source and release contract
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
 
     steps:
       - name: Check out source
@@ -34,3 +34,89 @@ jobs:
 
       - name: Run quality gate
         run: pnpm check
+
+  chromium-e2e:
+    name: Test packaged Chromium
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7
+
+      - name: Install pnpm and Node.js
+        uses: pnpm/setup@v2
+        with:
+          runtime: node@24
+          cache: true
+          install: false
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright Chromium and system dependencies
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Exercise the packaged Chromium extension
+        run: pnpm test:e2e:chromium
+
+  release-packages:
+    name: Validate release packages
+    needs: [verify, chromium-e2e]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7
+
+      - name: Install pnpm and Node.js
+        uses: pnpm/setup@v2
+        with:
+          runtime: node@24
+          cache: true
+          install: false
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build and validate release packages
+        run: |
+          pnpm package:build
+          pnpm package:validate
+          pnpm package:checksums
+
+      - name: Check tracked files for secret patterns
+        shell: bash
+        run: |
+          # Credential-length suffixes keep documented detector prefixes from becoming false positives.
+          if matches=$(git grep -IlE '(gho_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|sk-[A-Za-z0-9_-]{20,}|BEGIN (RSA|OPENSSH) PRIVATE KEY)' -- . ':!pnpm-lock.yaml'); then
+            echo 'Potential secret pattern found in tracked files:'
+            printf '%s\n' "$matches"
+            exit 1
+          fi
+
+      - name: Inspect release archive listings
+        run: |
+          unzip -Z1 .output/tracemark-1.0.0-chrome.zip | sort
+          unzip -Z1 .output/tracemark-1.0.0-firefox.zip | sort
+          unzip -Z1 .output/tracemark-1.0.0-sources.zip | sort
+
+      - name: Verify release assets
+        run: |
+          test -f .output/tracemark-1.0.0-sources.zip
+          (cd .output && sha256sum --check SHA256SUMS)
+          pnpm screenshots:check
+
+      - name: Upload release review artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: tracemark-1.0.0-release-artifacts
+          if-no-files-found: error
+          compression-level: 0
+          path: |
+            .output/tracemark-1.0.0-chrome.zip
+            .output/tracemark-1.0.0-firefox.zip
+            .output/tracemark-1.0.0-sources.zip
+            .output/SHA256SUMS
