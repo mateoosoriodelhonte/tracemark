@@ -1,0 +1,58 @@
+name: Feature request
+description: Propose a focused improvement to TraceMark
+title: '[Feature]: '
+labels:
+  - enhancement
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Describe the research problem first. TraceMark keeps research local by default and treats new permissions, network destinations, and persistent page access as architecture changes.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What research workflow is difficult today, and who encounters it?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior
+      description: Describe the smallest user-visible change that would solve the problem.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Include current workarounds or narrower options.
+    validations:
+      required: true
+  - type: textarea
+    id: privacy
+    attributes:
+      label: Privacy, permissions, and storage impact
+      description: State whether this needs a new browser permission, origin, data field, migration, export change, or external service.
+    validations:
+      required: true
+  - type: dropdown
+    id: browsers
+    attributes:
+      label: Browser scope
+      options:
+        - Chrome and Firefox
+        - Chrome only
+        - Firefox only
+        - Browser-independent
+    validations:
+      required: true
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checks
+      options:
+        - label: I searched existing issues for this request.
+          required: true
+        - label: I have not included sensitive research or security details.
+          required: true
