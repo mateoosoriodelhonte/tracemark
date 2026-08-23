@@ -134,6 +134,20 @@ describe('AIAssistanceService privacy gates', () => {
     expect(provider.summarize).not.toHaveBeenCalled();
   });
 
+  test('rejects a malformed source ID before reading the repository', async () => {
+    const repository = await createRepository();
+    const getHighlight = vi.spyOn(repository, 'getHighlight');
+    const provider = createProvider();
+    const service = createService(repository, provider, enabledSettings, true);
+
+    await expect(service.run('summary', ['not-a-uuid'])).rejects.toMatchObject({
+      code: 'NOT_FOUND',
+    } satisfies Pick<AIAssistanceError, 'code'>);
+
+    expect(getHighlight).not.toHaveBeenCalled();
+    expect(provider.summarize).not.toHaveBeenCalled();
+  });
+
   test('sends only the explicitly selected reduced research record to the provider', async () => {
     const repository = await createRepository();
     await repository.putCollection(makeCollection());

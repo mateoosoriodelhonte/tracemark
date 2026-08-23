@@ -49,7 +49,15 @@ export class ResearchRepository {
   }
 
   async deleteHighlight(id: string): Promise<void> {
-    await this.database.highlights.delete(id);
+    await this.database.transaction(
+      'rw',
+      this.database.highlights,
+      this.database.aiResults,
+      async () => {
+        await this.database.aiResults.where('sourceHighlightIds').equals(id).delete();
+        await this.database.highlights.delete(id);
+      },
+    );
   }
 
   async putCollection(input: unknown): Promise<Collection> {

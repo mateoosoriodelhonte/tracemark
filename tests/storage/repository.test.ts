@@ -97,4 +97,25 @@ describe('ResearchRepository', () => {
     ]);
     await expect(repository.putAIResult({ ...result, content: '' })).rejects.toThrow();
   });
+
+  test.each([
+    ['non-normalized', ['#Retrieval']],
+    ['duplicate', ['retrieval', 'retrieval']],
+  ])('rejects %s persisted suggested tags', async (_, suggestedTags) => {
+    const repository = await createRepository();
+
+    await expect(
+      repository.putAIResult({
+        id: '3a80e81a-4b11-464c-a329-a6ae7498a61d',
+        schemaVersion: 1,
+        kind: 'tags',
+        provider: 'ollama',
+        sourceHighlightIds: [makeHighlight().id],
+        content: 'retrieval',
+        suggestedTags,
+        createdAt: '2026-08-22T06:00:00.000Z',
+      }),
+    ).rejects.toThrow();
+    expect(await repository.listAIResults()).toEqual([]);
+  });
 });

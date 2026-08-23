@@ -24,7 +24,7 @@ interface OllamaProviderDependencies {
 }
 
 const OLLAMA_CHAT_URL = 'http://127.0.0.1:11434/api/chat';
-const MAX_RESPONSE_LENGTH = 1_048_576;
+const MAX_RESPONSE_BYTES = 1_048_576;
 
 const textFormat = {
   type: 'object',
@@ -89,7 +89,7 @@ export class OllamaProvider implements AIProvider {
         throw new AIProviderError('AI_UNAVAILABLE', 'Local AI is unavailable');
       }
 
-      return this.parseResponse(await response.text(), kind);
+      return this.parseResponse(await this.readResponseText(response, controller), kind);
     } catch (error) {
       if (error instanceof AIProviderError) throw error;
       if (controller.signal.aborted) {
@@ -144,12 +144,50 @@ export class OllamaProvider implements AIProvider {
     });
   }
 
+  private async readResponseText(response: Response, controller: AbortController): Promise<string> {
+    if (response.body === null || response.body === undefined) {
+      const declaredLength = Number(response.headers?.get('content-length'));
+      if (Number.isFinite(declaredLength) && declaredLength > MAX_RESPONSE_BYTES) {
+        controller.abort();
+        return this.invalidOutput();
+      }
+      const responseText = await response.text();
+      if (new TextEncoder().encode(responseText).byteLength > MAX_RESPONSE_BYTES) {
+        controller.abort();
+        return this.invalidOutput();
+      }
+      return responseText;
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let byteCount = 0;
+    let responseText = '';
+    try {
+      while (true) {
+        const chunk = await reader.read();
+        if (chunk.done) return responseText + decoder.decode();
+        byteCount += chunk.value.byteLength;
+        if (byteCount > MAX_RESPONSE_BYTES) {
+          try {
+            await reader.cancel();
+          } catch {
+            // The explicit provider error below remains safe even if stream cancellation fails.
+          }
+          controller.abort();
+          return this.invalidOutput();
+        }
+        responseText += decoder.decode(chunk.value, { stream: true });
+      }
+    } finally {
+      reader.releaseLock();
+    }
+  }
+
   private parseResponse(
     responseText: string,
     kind: AssistanceKind,
   ): TextAssistance | TagAssistance {
-    if (responseText.length > MAX_RESPONSE_LENGTH) this.invalidOutput();
-
     let envelope: unknown;
     try {
       envelope = JSON.parse(responseText);

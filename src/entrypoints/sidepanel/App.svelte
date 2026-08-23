@@ -22,6 +22,7 @@
   import { sendRequest } from '../../messaging/client';
   import {
     DeleteResultSchema,
+    ModelNameSchema,
     TagListSchema,
     type MessageRequest,
     type MessageResponse,
@@ -55,10 +56,12 @@
   let error = $state('');
   let aiProvider = $state<'none' | 'ollama'>('none');
   let aiModel = $state('llama3.2');
+  let persistedAIModel = $state('llama3.2');
   let aiBusy = $state(false);
   let aiError = $state('');
   let aiTaskBusy = $state(false);
   let aiResult = $state<AIResult>();
+  let permissionRemovalPending = $state(false);
   let selectedHighlightIds = $state<string[]>([]);
   let activeDialog = $state<DialogName>();
   let returnFocus = $state<HTMLElement>();
@@ -115,6 +118,7 @@
       theme = savedSettings.theme;
       aiProvider = savedSettings.ai.provider;
       aiModel = savedSettings.ai.model;
+      persistedAIModel = savedSettings.ai.model;
       collections = savedCollections;
       knownTags = savedTags;
       await loadResearch();
@@ -328,21 +332,47 @@
   async function enableLocalAI(): Promise<void> {
     aiBusy = true;
     aiError = '';
+    const model = ModelNameSchema.safeParse(aiModel);
+    if (!model.success) {
+      aiModel = persistedAIModel;
+      aiError = 'Enter a valid Ollama model name before enabling local AI.';
+      aiBusy = false;
+      return;
+    }
+    aiModel = model.data;
+
+    let granted: boolean;
     try {
-      const granted = await requestOllamaPermission([OLLAMA_PERMISSION_ORIGIN]);
-      if (!granted) {
-        aiError = 'Ollama permission was not granted. Local AI remains disabled.';
-        return;
-      }
+      granted = await requestOllamaPermission([OLLAMA_PERMISSION_ORIGIN]);
+    } catch {
+      aiError = 'Ollama permission could not be requested. Local AI remains disabled.';
+      aiBusy = false;
+      return;
+    }
+    if (!granted) {
+      aiError = 'Ollama permission was not granted. Local AI remains disabled.';
+      aiBusy = false;
+      return;
+    }
+
+    try {
       const saved = await dataFor(
-        { type: 'settings.ai.set', provider: 'ollama', model: aiModel },
+        { type: 'settings.ai.set', provider: 'ollama', model: model.data },
         SettingsSchema,
       );
       aiProvider = saved.ai.provider;
       aiModel = saved.ai.model;
+      persistedAIModel = saved.ai.model;
+      permissionRemovalPending = false;
       status = 'Local AI enabled. Select research before asking for assistance.';
     } catch {
-      aiError = 'Ollama permission could not be requested. Local AI remains disabled.';
+      aiProvider = 'none';
+      aiModel = persistedAIModel;
+      const removed = await tryRemoveOllamaPermission();
+      permissionRemovalPending = !removed;
+      aiError = removed
+        ? 'TraceMark could not enable local AI. Ollama permission was removed.'
+        : 'TraceMark could not enable local AI, and Ollama permission could not be removed. Retry permission removal.';
     } finally {
       aiBusy = false;
     }
@@ -353,12 +383,14 @@
     aiError = '';
     try {
       const saved = await dataFor(
-        { type: 'settings.ai.set', provider: 'none', model: aiModel },
+        { type: 'settings.ai.set', provider: 'none', model: persistedAIModel },
         SettingsSchema,
       );
       aiProvider = saved.ai.provider;
       aiModel = saved.ai.model;
+      persistedAIModel = saved.ai.model;
     } catch (settingsError) {
+      aiModel = persistedAIModel;
       aiError =
         settingsError instanceof Error && settingsError.message.length > 0
           ? settingsError.message
@@ -369,9 +401,11 @@
 
     try {
       const removed = await removeOllamaPermission([OLLAMA_PERMISSION_ORIGIN]);
+      permissionRemovalPending = !removed;
       if (!removed) aiError = 'Ollama permission could not be removed in browser settings.';
       else status = 'Local AI disabled and Ollama permission removed.';
     } catch {
+      permissionRemovalPending = true;
       aiError = 'Ollama permission could not be removed in browser settings.';
     } finally {
       aiBusy = false;
@@ -382,18 +416,48 @@
     if (aiProvider !== 'ollama') return;
     aiBusy = true;
     aiError = '';
+    const parsed = ModelNameSchema.safeParse(model);
+    if (!parsed.success) {
+      aiModel = persistedAIModel;
+      aiError = 'Enter a valid Ollama model name.';
+      aiBusy = false;
+      return;
+    }
     try {
       const saved = await dataFor(
-        { type: 'settings.ai.set', provider: 'ollama', model },
+        { type: 'settings.ai.set', provider: 'ollama', model: parsed.data },
         SettingsSchema,
       );
       aiModel = saved.ai.model;
+      persistedAIModel = saved.ai.model;
       status = `Local AI model set to ${aiModel}.`;
     } catch (modelError) {
+      aiModel = persistedAIModel;
       aiError =
         modelError instanceof Error && modelError.message.length > 0
           ? modelError.message
           : 'TraceMark could not save this Ollama model.';
+    } finally {
+      aiBusy = false;
+    }
+  }
+
+  async function tryRemoveOllamaPermission(): Promise<boolean> {
+    try {
+      return await removeOllamaPermission([OLLAMA_PERMISSION_ORIGIN]);
+    } catch {
+      return false;
+    }
+  }
+
+  async function retryOllamaPermissionRemoval(): Promise<void> {
+    aiBusy = true;
+    aiError = '';
+    try {
+      const removed = await tryRemoveOllamaPermission();
+      permissionRemovalPending = !removed;
+      if (removed) status = 'Ollama permission removed. Local AI remains disabled.';
+      else aiError = 'Ollama permission could not be removed in browser settings.';
     } finally {
       aiBusy = false;
     }
@@ -409,7 +473,7 @@
   }
 
   async function runLocalAI(kind: AIResultKind): Promise<void> {
-    if (aiProvider !== 'ollama' || aiTaskBusy) return;
+    if (aiProvider !== 'ollama' || aiBusy || aiTaskBusy) return;
     const visibleHighlightIds = new Set(highlights.map(({ id }) => id));
     const sourceHighlightIds = selectedHighlightIds.filter((id) => visibleHighlightIds.has(id));
     if (sourceHighlightIds.length !== selectedHighlightIds.length) {
@@ -603,6 +667,14 @@
             onclick={() => void enableLocalAI()}>Enable local AI</button
           >
         {/if}
+        {#if permissionRemovalPending}
+          <button
+            type="button"
+            class="quiet-button"
+            disabled={aiBusy}
+            onclick={() => void retryOllamaPermissionRemoval()}>Retry permission removal</button
+          >
+        {/if}
       </div>
       {#if aiProvider === 'ollama'}
         <div class="ai-actions">
@@ -613,25 +685,25 @@
             <button
               type="button"
               class="quiet-button"
-              disabled={selectedHighlightIds.length === 0 || aiTaskBusy}
+              disabled={selectedHighlightIds.length === 0 || aiBusy || aiTaskBusy}
               onclick={() => void runLocalAI('summary')}>Summarize</button
             >
             <button
               type="button"
               class="quiet-button"
-              disabled={selectedHighlightIds.length === 0 || aiTaskBusy}
+              disabled={selectedHighlightIds.length === 0 || aiBusy || aiTaskBusy}
               onclick={() => void runLocalAI('explanation')}>Explain</button
             >
             <button
               type="button"
               class="quiet-button"
-              disabled={selectedHighlightIds.length === 0 || aiTaskBusy}
+              disabled={selectedHighlightIds.length === 0 || aiBusy || aiTaskBusy}
               onclick={() => void runLocalAI('tags')}>Suggest tags</button
             >
             <button
               type="button"
               class="quiet-button"
-              disabled={selectedHighlightIds.length === 0 || aiTaskBusy}
+              disabled={selectedHighlightIds.length === 0 || aiBusy || aiTaskBusy}
               onclick={() => void runLocalAI('overview')}>Overview</button
             >
           </div>

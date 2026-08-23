@@ -10,6 +10,7 @@ import {
   MAX_TAGS,
   MAX_TITLE_LENGTH,
 } from './constants';
+import { normalizeTags } from './tags';
 import { safeSourceUrl } from './urls';
 
 z.config({ jitless: true });
@@ -27,6 +28,16 @@ export const WebUrlSchema = z
   .max(8_192)
   .refine((value) => safeSourceUrl(value) === value, 'Must be a normalized HTTP(S) URL');
 export const TagSchema = NonBlankString(MAX_TAG_LENGTH);
+const NormalizedTagListSchema = z
+  .array(TagSchema)
+  .min(1)
+  .max(MAX_TAGS)
+  .refine((tags) => {
+    const normalized = normalizeTags(tags);
+    return (
+      normalized.length === tags.length && normalized.every((tag, index) => tag === tags[index])
+    );
+  }, 'Tags must be normalized and distinct');
 
 export const TextAssistanceSchema = z
   .object({
@@ -108,7 +119,7 @@ export const AIResultSchema = z
     provider: z.literal('ollama'),
     sourceHighlightIds: z.array(IdSchema).min(1).max(500),
     content: z.string().min(1).max(100_000),
-    suggestedTags: z.array(TagSchema).min(1).max(MAX_TAGS).optional(),
+    suggestedTags: NormalizedTagListSchema.optional(),
     createdAt: TimestampSchema,
   })
   .strict();

@@ -118,6 +118,107 @@ describe('OllamaProvider requests', () => {
 });
 
 describe('OllamaProvider validation and failures', () => {
+  test('reads a streamed response incrementally instead of buffering it with response.text', async () => {
+    const encoder = new TextEncoder();
+    const responseBody = JSON.stringify({
+      message: {
+        role: 'assistant',
+        content: JSON.stringify({ content: 'Streamed local answer.' }),
+      },
+    });
+    const midpoint = Math.floor(responseBody.length / 2);
+    const response = new Response(
+      new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(encoder.encode(responseBody.slice(0, midpoint)));
+          controller.enqueue(encoder.encode(responseBody.slice(midpoint)));
+          controller.close();
+        },
+      }),
+    );
+    const text = vi.spyOn(response, 'text');
+    const provider = new OllamaProvider({ fetch: vi.fn().mockResolvedValue(response) });
+
+    await expect(provider.summarize({ items: [selectedItem] }, 'llama3.2')).resolves.toEqual({
+      content: 'Streamed local answer.',
+    });
+    expect(text).not.toHaveBeenCalled();
+  });
+
+  test('cancels an oversized response stream before reading another chunk', async () => {
+    const reader = {
+      read: vi.fn().mockResolvedValueOnce({
+        done: false,
+        value: new Uint8Array(1_048_577),
+      }),
+      cancel: vi.fn().mockResolvedValue(undefined),
+      releaseLock: vi.fn(),
+    };
+    const response = {
+      ok: true,
+      status: 200,
+      body: { getReader: () => reader },
+      text: vi.fn().mockResolvedValue(
+        JSON.stringify({
+          message: {
+            role: 'assistant',
+            content: JSON.stringify({ content: 'Must not be accepted.' }),
+          },
+        }),
+      ),
+    } as unknown as Response;
+    const provider = new OllamaProvider({ fetch: vi.fn().mockResolvedValue(response) });
+
+    await expect(provider.summarize({ items: [selectedItem] }, 'llama3.2')).rejects.toMatchObject({
+      code: 'AI_INVALID_OUTPUT',
+    });
+    expect(reader.read).toHaveBeenCalledOnce();
+    expect(reader.cancel).toHaveBeenCalledOnce();
+    expect(response.text).not.toHaveBeenCalled();
+  });
+
+  test('rejects a declared oversized fallback response before calling response.text', async () => {
+    const response = {
+      ok: true,
+      status: 200,
+      body: null,
+      headers: new Headers({ 'content-length': '1048577' }),
+      text: vi.fn().mockResolvedValue(
+        JSON.stringify({
+          message: {
+            role: 'assistant',
+            content: JSON.stringify({ content: 'Must not be accepted.' }),
+          },
+        }),
+      ),
+    } as unknown as Response;
+    const provider = new OllamaProvider({ fetch: vi.fn().mockResolvedValue(response) });
+
+    await expect(provider.summarize({ items: [selectedItem] }, 'llama3.2')).rejects.toMatchObject({
+      code: 'AI_INVALID_OUTPUT',
+    });
+    expect(response.text).not.toHaveBeenCalled();
+  });
+
+  test('applies the response limit to UTF-8 bytes in the non-streaming fallback', async () => {
+    const responseBody = JSON.stringify({
+      message: {
+        role: 'assistant',
+        content: JSON.stringify({ content: 'A valid small answer.' }),
+      },
+      padding: 'é'.repeat(524_288),
+    });
+    expect(responseBody.length).toBeLessThan(1_048_576);
+    expect(new TextEncoder().encode(responseBody).byteLength).toBeGreaterThan(1_048_576);
+    const provider = new OllamaProvider({
+      fetch: vi.fn().mockResolvedValue(responseWithText(200, responseBody)),
+    });
+
+    await expect(provider.summarize({ items: [selectedItem] }, 'llama3.2')).rejects.toMatchObject({
+      code: 'AI_INVALID_OUTPUT',
+    });
+  });
+
   test('maps an aborted request to AI_TIMEOUT and clears its timer', async () => {
     let timeout: (() => void) | undefined;
     const clearTimer = vi.fn();

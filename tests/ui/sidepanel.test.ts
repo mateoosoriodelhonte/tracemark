@@ -149,6 +149,82 @@ describe('research library side panel', () => {
     expect(request).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'ai.run' }));
   });
 
+  test('rejects an invalid model before requesting permission and restores the persisted model', async () => {
+    const request = libraryRequest();
+    const requestOllamaPermission = vi.fn().mockResolvedValue(true);
+    render(App, { props: { request, requestOllamaPermission } });
+    await screen.findByText('<script>alert(1)</script>');
+    const modelInput = screen.getByRole('textbox', { name: 'Ollama model' });
+
+    await fireEvent.input(modelInput, { target: { value: 'model name with spaces' } });
+    await fireEvent.click(screen.getByRole('button', { name: 'Enable local AI' }));
+
+    expect(requestOllamaPermission).not.toHaveBeenCalled();
+    expect(request).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'settings.ai.set' }));
+    expect(modelInput).toHaveValue('llama3.2');
+    expect(screen.getByRole('alert')).toHaveTextContent(/valid ollama model/i);
+  });
+
+  test('revokes newly granted permission when enabling settings cannot be persisted', async () => {
+    const baseRequest = libraryRequest();
+    const request = vi.fn((message: MessageRequest): Promise<MessageResponse> => {
+      if (message.type === 'settings.ai.set') {
+        return Promise.resolve({
+          ok: false,
+          code: 'INTERNAL_ERROR',
+          message: 'TraceMark could not save local AI settings.',
+        });
+      }
+      return baseRequest(message);
+    });
+    const requestOllamaPermission = vi.fn().mockResolvedValue(true);
+    const removeOllamaPermission = vi.fn().mockResolvedValue(true);
+    render(App, {
+      props: { request, requestOllamaPermission, removeOllamaPermission },
+    });
+    await screen.findByText('<script>alert(1)</script>');
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Enable local AI' }));
+
+    await waitFor(() => expect(removeOllamaPermission).toHaveBeenCalledWith([ollamaOrigin]));
+    expect(screen.getByText('Disabled')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Enable local AI' })).toBeInTheDocument();
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      /could not enable.*permission was removed/i,
+    );
+  });
+
+  test('retains a permission-removal retry after enable rollback fails', async () => {
+    const baseRequest = libraryRequest();
+    const request = vi.fn((message: MessageRequest): Promise<MessageResponse> => {
+      if (message.type === 'settings.ai.set') {
+        return Promise.resolve({
+          ok: false,
+          code: 'INTERNAL_ERROR',
+          message: 'TraceMark could not save local AI settings.',
+        });
+      }
+      return baseRequest(message);
+    });
+    const requestOllamaPermission = vi.fn().mockResolvedValue(true);
+    const removeOllamaPermission = vi.fn().mockResolvedValueOnce(false).mockResolvedValueOnce(true);
+    render(App, {
+      props: { request, requestOllamaPermission, removeOllamaPermission },
+    });
+    await screen.findByText('<script>alert(1)</script>');
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Enable local AI' }));
+    const retry = await screen.findByRole('button', { name: 'Retry permission removal' });
+
+    expect(screen.getByRole('alert')).toHaveTextContent(/permission could not be removed/i);
+    await fireEvent.click(retry);
+    await waitFor(() => expect(removeOllamaPermission).toHaveBeenCalledTimes(2));
+    await waitFor(() =>
+      expect(screen.queryByRole('button', { name: 'Retry permission removal' })).toBeNull(),
+    );
+    expect(screen.getByText('Disabled')).toBeInTheDocument();
+  });
+
   test('disables AI before attempting to remove Ollama permission', async () => {
     const request = libraryRequest({
       ...settings,
@@ -170,6 +246,65 @@ describe('research library side panel', () => {
     expect(removeOllamaPermission).toHaveBeenCalledWith([ollamaOrigin]);
     expect(await screen.findByRole('alert')).toHaveTextContent(/permission could not be removed/i);
     expect(screen.getByRole('button', { name: 'Enable local AI' })).toBeInTheDocument();
+  });
+
+  test('disables with the last persisted model after an invalid unsaved edit', async () => {
+    const request = libraryRequest({
+      ...settings,
+      ai: { provider: 'ollama', model: 'llama3.2' },
+    });
+    const removeOllamaPermission = vi.fn().mockResolvedValue(true);
+    render(App, { props: { request, removeOllamaPermission } });
+    await screen.findByText('<script>alert(1)</script>');
+    const modelInput = screen.getByRole('textbox', { name: 'Ollama model' });
+
+    await fireEvent.input(modelInput, { target: { value: 'invalid model name' } });
+    await fireEvent.click(screen.getByRole('button', { name: 'Disable local AI' }));
+
+    await waitFor(() =>
+      expect(request).toHaveBeenCalledWith({
+        type: 'settings.ai.set',
+        provider: 'none',
+        model: 'llama3.2',
+      }),
+    );
+    expect(modelInput).toHaveValue('llama3.2');
+  });
+
+  test('does not dispatch local AI while a disable mutation is pending', async () => {
+    const enabledSettings: Settings = {
+      ...settings,
+      ai: { provider: 'ollama', model: 'llama3.2' },
+    };
+    const baseRequest = libraryRequest(enabledSettings);
+    let finishDisable: (response: MessageResponse) => void = () => undefined;
+    const pendingDisable = new Promise<MessageResponse>((resolve) => {
+      finishDisable = resolve;
+    });
+    const request = vi.fn((message: MessageRequest): Promise<MessageResponse> => {
+      if (message.type === 'settings.ai.set' && message.provider === 'none') {
+        return pendingDisable;
+      }
+      return baseRequest(message);
+    });
+    const removeOllamaPermission = vi.fn().mockResolvedValue(true);
+    render(App, { props: { request, removeOllamaPermission } });
+    await screen.findByText('<script>alert(1)</script>');
+    await fireEvent.click(
+      screen.getByRole('checkbox', { name: `Select ${hostileHighlight.title}` }),
+    );
+    const summarize = screen.getByRole('button', { name: 'Summarize' });
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Disable local AI' }));
+    await fireEvent.click(summarize);
+
+    expect(request).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'ai.run' }));
+    expect(summarize).toBeDisabled();
+    finishDisable({
+      ok: true,
+      data: { ...enabledSettings, ai: { provider: 'none', model: 'llama3.2' } },
+    });
+    await screen.findByRole('button', { name: 'Enable local AI' });
   });
 
   test('runs one local task for exactly the checked research and renders hostile output as text', async () => {

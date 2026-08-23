@@ -1,6 +1,6 @@
 import { AIProviderError, type AIProvider, type ResearchItem } from './ai-provider';
 import type { AIAssistanceErrorCode, AIResult, AIResultKind, Settings } from '../domain/models';
-import { AIResultSchema } from '../domain/schemas';
+import { AIResultSchema, IdSchema } from '../domain/schemas';
 import type { ResearchRepository } from '../storage/repository';
 
 export const OLLAMA_PERMISSION_ORIGIN = 'http://127.0.0.1:11434/*';
@@ -54,7 +54,8 @@ export class AIAssistanceService {
     if (
       sourceHighlightIds.length < 1 ||
       sourceHighlightIds.length > 20 ||
-      new Set(sourceHighlightIds).size !== sourceHighlightIds.length
+      new Set(sourceHighlightIds).size !== sourceHighlightIds.length ||
+      sourceHighlightIds.some((id) => !IdSchema.safeParse(id).success)
     ) {
       throw new AIAssistanceError('NOT_FOUND', 'Selected research was not found');
     }
