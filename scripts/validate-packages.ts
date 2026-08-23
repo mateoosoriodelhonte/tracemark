@@ -13,6 +13,14 @@ type Manifest = {
   content_scripts?: unknown[];
   side_panel?: unknown;
   sidebar_action?: unknown;
+  browser_specific_settings?: {
+    gecko?: {
+      data_collection_permissions?: {
+        required?: string[];
+        optional?: string[];
+      };
+    };
+  };
 };
 
 const outputDirectory = resolve('.output');
@@ -96,6 +104,16 @@ function validateManifest(browser: Browser, manifest: Manifest, archive: string)
     (manifest.side_panel !== undefined || manifest.sidebar_action === undefined)
   ) {
     problems.push(`${archive} must use Firefox sidebar_action and not Chrome side_panel`);
+  }
+  if (
+    browser === 'firefox' &&
+    JSON.stringify(manifest.browser_specific_settings?.gecko?.data_collection_permissions) !==
+      JSON.stringify({
+        required: ['none'],
+        optional: ['websiteContent', 'browsingActivity'],
+      })
+  ) {
+    problems.push(`${archive} has unexpected Firefox data collection permissions`);
   }
 
   return problems;

@@ -93,6 +93,36 @@ function runPackageValidatorWithChromeEntry(entryName: string): SpawnSyncReturns
   }
 }
 
+function runPackageValidatorWithFirefoxManifest(
+  updateManifest: (manifest: Manifest) => void,
+): SpawnSyncReturns<string> {
+  const temporaryRoot = mkdtempSync(join(tmpdir(), 'tracemark-package-validation-'));
+  const outputDirectory = join(temporaryRoot, '.output');
+  mkdirSync(outputDirectory);
+
+  try {
+    copyFileSync(resolve(packageRoot, chromeArchiveName), join(outputDirectory, chromeArchiveName));
+    copyFileSync(
+      resolve(packageRoot, firefoxArchiveName),
+      join(outputDirectory, firefoxArchiveName),
+    );
+    const manifest = readArchiveManifest(firefoxArchiveName);
+    updateManifest(manifest);
+    writeFileSync(join(temporaryRoot, 'manifest.json'), JSON.stringify(manifest));
+    execFileSync('zip', ['-q', join(outputDirectory, firefoxArchiveName), 'manifest.json'], {
+      cwd: temporaryRoot,
+    });
+
+    return spawnSync(
+      'node',
+      ['--experimental-strip-types', resolve('scripts/validate-packages.ts')],
+      { cwd: temporaryRoot, encoding: 'utf8' },
+    );
+  } finally {
+    rmSync(temporaryRoot, { force: true, recursive: true });
+  }
+}
+
 describe('v1.0.0 release packages', () => {
   test('release validation command accepts the built archives', () => {
     const result = spawnSync(
@@ -111,6 +141,17 @@ describe('v1.0.0 release packages', () => {
 
     expect(result.status, result.stderr).toBe(1);
     expect(result.stderr).toContain('contains source map bundle.MAP');
+  });
+
+  test('release validation rejects incomplete Firefox built-in data consent', () => {
+    const result = runPackageValidatorWithFirefoxManifest((manifest) => {
+      manifest.browser_specific_settings!.gecko!.data_collection_permissions!.optional = [
+        'websiteContent',
+      ];
+    });
+
+    expect(result.status, result.stderr).toBe(1);
+    expect(result.stderr).toContain('has unexpected Firefox data collection permissions');
   });
 
   test.each(['bundle.MAP', 'credentials.json', 'secret.key'])(

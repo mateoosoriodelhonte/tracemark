@@ -41,11 +41,12 @@ granted at installation.
 
 ## Optional Ollama origin
 
-`http://127.0.0.1:11434/*` is not granted at installation. TraceMark requests it only when the user
-chooses **Enable local AI**, and the browser controls the permission prompt. The origin permits the
-background context to call the local Ollama chat API. TraceMark's implementation sends selected
-stored research only for a requested AI action and does not use `localhost`, IPv6 loopback, another
-port, a LAN address, or `ollama.com`.
+`http://127.0.0.1:11434/*` is not granted at installation. Chromium requests it when the user
+chooses **Enable local AI**; Firefox requests it from the follow-up **Continue enabling local AI**
+click after built-in data consent is granted. The browser controls each permission prompt. The
+origin permits the background context to call the local Ollama chat API. TraceMark's implementation
+sends selected stored research only for a requested AI action and does not use `localhost`, IPv6
+loopback, another port, a LAN address, or `ollama.com`.
 
 The URL uses HTTP, not HTTPS. Loopback traffic is not encrypted and the permission does not make the
 Ollama process, models, browser, operating system, or other local software trustworthy. Users can
