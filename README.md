@@ -40,8 +40,20 @@ browser store. Download the reviewed artifacts from the
 
 Verify the downloaded browser archive against `SHA256SUMS` before installation.
 
-First install [Node.js 22 or newer](https://nodejs.org/) and pnpm 11.19.0, then build both browser
-targets:
+### Choose an installation path
+
+| Goal                           | Recommended path                                                                                |
+| ------------------------------ | ----------------------------------------------------------------------------------------------- |
+| Try the reviewed Chrome build  | Download, verify, and extract the Chrome ZIP, then load its extracted directory as unpacked.    |
+| Try the reviewed Firefox build | Download and verify the Firefox ZIP; it remains unsigned and is intended for temporary testing. |
+| Develop or audit either build  | Clone the repository and build from source with the pinned Node.js and pnpm versions below.     |
+
+Downloaded release packages do not require Node.js or pnpm. Those tools are required only when
+building or developing TraceMark from source.
+
+### Build from source
+
+Install [Node.js 22 or newer](https://nodejs.org/) and pnpm 11.19.0, then build both browser targets:
 
 ```sh
 pnpm install --frozen-lockfile
@@ -53,7 +65,8 @@ pnpm build:firefox
 
 1. Open `chrome://extensions`.
 2. Enable **Developer mode**.
-3. Choose **Load unpacked** and select `.output/chrome-mv3`.
+3. Choose **Load unpacked** and select `.output/chrome-mv3` for a source build, or the extracted
+   Chrome release-package directory containing `manifest.json`.
 
 Chrome documents this workflow in [Load an unpacked extension](https://developer.chrome.com/docs/extensions/get-started/tutorial/hello-world#load-unpacked).
 
@@ -65,8 +78,9 @@ see Mozilla's
 [signing and distribution overview](https://extensionworkshop.com/documentation/publish/signing-and-distribution-overview/).
 
 For development, open `about:debugging#/runtime/this-firefox`, choose **Load Temporary Add-on**,
-and select `.output/firefox-mv3/manifest.json`. Firefox removes a temporary add-on when Firefox
-restarts. See Mozilla's [temporary installation guide](https://extensionworkshop.com/documentation/develop/temporary-installation-in-firefox/).
+and select `.output/firefox-mv3/manifest.json`, or extract the reviewed Firefox package and select
+its `manifest.json`. Firefox removes a temporary add-on when Firefox restarts. See Mozilla's
+[temporary installation guide](https://extensionworkshop.com/documentation/develop/temporary-installation-in-firefox/).
 
 ## Use TraceMark
 
