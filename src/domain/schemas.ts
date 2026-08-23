@@ -28,6 +28,29 @@ export const WebUrlSchema = z
   .refine((value) => safeSourceUrl(value) === value, 'Must be a normalized HTTP(S) URL');
 export const TagSchema = NonBlankString(MAX_TAG_LENGTH);
 
+export const TextAssistanceSchema = z
+  .object({
+    content: NonBlankString(100_000),
+  })
+  .strict();
+
+export const TagAssistanceSchema = z
+  .object({
+    tags: z.array(TagSchema).min(1).max(MAX_TAGS),
+  })
+  .strict();
+
+export const OllamaChatResponseSchema = z
+  .object({
+    message: z
+      .object({
+        role: z.literal('assistant'),
+        content: z.string(),
+      })
+      .passthrough(),
+  })
+  .passthrough();
+
 export const HighlightSchema = z
   .object({
     id: IdSchema,
