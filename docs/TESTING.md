@@ -5,6 +5,18 @@ Chrome and Firefox extensions. A green component or integration test does not, b
 browser package starts. Likewise, a packaged library test does not prove browser-chrome gestures
 that WebDriver cannot perform.
 
+## Evidence at a glance
+
+| Question                                                | Evidence                                                                 |
+| ------------------------------------------------------- | ------------------------------------------------------------------------ |
+| Do domain, storage, messaging, and UI behaviors pass?   | `pnpm test`                                                              |
+| Do source, manifests, packages, docs, and assets agree? | `pnpm check`                                                             |
+| Does the packaged library run in Chromium and Firefox?  | `pnpm test:e2e:chromium` and `pnpm test:e2e:firefox:release`             |
+| Do browser-owned gestures and permission prompts work?  | The fresh-profile Chrome and Firefox manual checklists in this document. |
+
+No single row substitutes for another. A release review should cite the exact commands and manual
+steps it performed instead of summarizing them as a generic “tests passed.”
+
 ## Prerequisites
 
 - Node.js 22 or newer and pnpm 11.19.0.
@@ -45,13 +57,13 @@ require installed browsers and, for Firefox, a compatible WebDriver environment.
 
 ## Recorded v1.0.0 release gate
 
-The local release gate was recorded on 2026-08-22 on macOS arm64 with Node.js 26.0.0, pnpm 11.19.0,
+The local release gate was recorded on 2026-08-23 on macOS arm64 with Node.js 26.0.0, pnpm 11.19.0,
 Playwright 1.62.1, Firefox 154.0, and geckodriver 0.37.1. Generated archives were removed before
 `pnpm check` to rule out a stale-artifact pass.
 
 | Evidence                      | Recorded result                                                                                                                 |
 | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| Archive-free `pnpm check`     | 33 Vitest files and 263 tests passed; format, lint, typecheck, secret scan, packages, checksums, links, and screenshots passed. |
+| Archive-free `pnpm check`     | 33 Vitest files and 264 tests passed; format, lint, typecheck, secret scan, packages, checksums, links, and screenshots passed. |
 | Packaged Chromium             | 2 Playwright tests passed against a fresh profile and the real unpacked Chrome MV3 build.                                       |
 | Packaged Firefox strict run   | Firefox 154.0 temporarily installed the exact Firefox ZIP; packaged manifest, startup, library, edit, and exports passed.       |
 | Deterministic store assets    | All 4 assets regenerated and then passed structural/dimension check mode.                                                       |
@@ -78,6 +90,9 @@ the three ZIPs plus `SHA256SUMS`. Strict Firefox WebDriver execution remains a l
 the native browser gestures listed below remain manual checks in both browsers and are not claimed
 by CI.
 
+The public `v1.0.0` GitHub release was created only after the local and post-merge automated gates
+passed. Its release notes explicitly preserve the native-browser evidence limitation below.
+
 ## Native-browser manual evidence status
 
 The native browser checklist is still pending; automated browser runs and mocks are not recorded as
@@ -95,7 +110,8 @@ proof of browser-owned prompts or chrome.
   permission doorhangers. Those gestures, fresh-tab recovery, and Firefox's actual two prompts
   remain pending.
 
-Do not release or submit to either store until a human completes and records both checklists below.
+Do not submit to either browser store until a human completes and records both checklists below.
+The GitHub release does not claim these interactions as automated evidence.
 
 The normal Firefox command fails when Firefox or WebDriver cannot start. A developer who knowingly
 lacks that local prerequisite may opt into a clearly reported skip with:
