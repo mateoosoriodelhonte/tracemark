@@ -1,6 +1,7 @@
-import { execFileSync, spawnSync } from 'node:child_process';
-import { existsSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { execFileSync, spawnSync, type SpawnSyncReturns } from 'node:child_process';
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { join, resolve } from 'node:path';
+import { tmpdir } from 'node:os';
 import { describe, expect, test } from 'vitest';
 
 type Manifest = {
@@ -21,6 +22,19 @@ type Manifest = {
 };
 
 const packageRoot = resolve('.output');
+const chromeArchiveName = 'tracemark-1.0.0-chrome.zip';
+const firefoxArchiveName = 'tracemark-1.0.0-firefox.zip';
+const requiredPackageFiles = [
+  'manifest.json',
+  'background.js',
+  'popup.html',
+  'sidepanel.html',
+  'icon/16.png',
+  'icon/32.png',
+  'icon/48.png',
+  'icon/96.png',
+  'icon/128.png',
+];
 
 function readArchiveEntries(archiveName: string): string[] {
   const archivePath = resolve(packageRoot, archiveName);
@@ -42,27 +56,37 @@ function readArchiveManifest(archiveName: string): Manifest {
 }
 
 function expectSafePackageContents(entries: string[]): void {
-  expect(entries).toEqual(
-    expect.arrayContaining([
-      'manifest.json',
-      'background.js',
-      'popup.html',
-      'sidepanel.html',
-      'icon/16.png',
-      'icon/32.png',
-      'icon/48.png',
-      'icon/96.png',
-      'icon/128.png',
-    ]),
-  );
+  expect(entries).toEqual(expect.arrayContaining(requiredPackageFiles));
 
-  expect(entries).not.toEqual(
-    expect.arrayContaining([
-      expect.stringMatching(/\.map$/iu),
-      expect.stringMatching(/(^|\/)(?:\.env(?:\..*)?|id_rsa|credentials?|secrets?)(?:$|\/|\.)/iu),
-      expect.stringMatching(/\.(?:pem|p12|pfx|key)$/iu),
-    ]),
+  expect(entries).not.toContainEqual(expect.stringMatching(/\.map$/iu));
+  expect(entries).not.toContainEqual(
+    expect.stringMatching(/(^|\/)(?:\.env(?:\..*)?|id_rsa|credentials?|secrets?)(?:$|\/|\.)/iu),
   );
+  expect(entries).not.toContainEqual(expect.stringMatching(/\.(?:pem|p12|pfx|key)$/iu));
+}
+
+function runPackageValidatorWithChromeEntry(entryName: string): SpawnSyncReturns<string> {
+  const temporaryRoot = mkdtempSync(join(tmpdir(), 'tracemark-package-validation-'));
+  const outputDirectory = join(temporaryRoot, '.output');
+  mkdirSync(outputDirectory);
+
+  try {
+    copyFileSync(resolve(packageRoot, chromeArchiveName), join(outputDirectory, chromeArchiveName));
+    copyFileSync(
+      resolve(packageRoot, firefoxArchiveName),
+      join(outputDirectory, firefoxArchiveName),
+    );
+    writeFileSync(join(outputDirectory, entryName), 'fixture');
+    execFileSync('zip', ['-q', chromeArchiveName, entryName], { cwd: outputDirectory });
+
+    return spawnSync(
+      'node',
+      ['--experimental-strip-types', resolve('scripts/validate-packages.ts')],
+      { cwd: temporaryRoot, encoding: 'utf8' },
+    );
+  } finally {
+    rmSync(temporaryRoot, { force: true, recursive: true });
+  }
 }
 
 describe('v1.0.0 release packages', () => {
@@ -78,9 +102,23 @@ describe('v1.0.0 release packages', () => {
     expect(result.status, result.stderr).toBe(0);
   });
 
+  test('release validation rejects source maps regardless of filename case', () => {
+    const result = runPackageValidatorWithChromeEntry('bundle.MAP');
+
+    expect(result.status, result.stderr).toBe(1);
+    expect(result.stderr).toContain('contains source map bundle.MAP');
+  });
+
+  test.each(['bundle.MAP', 'credentials.json', 'secret.key'])(
+    'package-content assertions reject %s when it is the only unsafe entry',
+    (unsafeEntry) => {
+      expect(() => expectSafePackageContents([...requiredPackageFiles, unsafeEntry])).toThrow();
+    },
+  );
+
   test.each([
-    ['Chrome', 'tracemark-1.0.0-chrome.zip'],
-    ['Firefox', 'tracemark-1.0.0-firefox.zip'],
+    ['Chrome', chromeArchiveName],
+    ['Firefox', firefoxArchiveName],
   ])('%s ships the exact release archive with only store-safe files', (_browser, archiveName) => {
     const entries = readArchiveEntries(archiveName);
 

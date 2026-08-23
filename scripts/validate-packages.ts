@@ -52,7 +52,7 @@ function validateContents(entries: string[], archive: string): string[] {
     .map((file) => `${archive} is missing required file ${file}`);
 
   for (const entry of entries) {
-    if (entry.endsWith('.map')) problems.push(`${archive} contains source map ${entry}`);
+    if (/\.map$/iu.test(entry)) problems.push(`${archive} contains source map ${entry}`);
     if (privateMaterial.some((pattern) => pattern.test(entry))) {
       problems.push(`${archive} contains potential private material ${entry}`);
     }
