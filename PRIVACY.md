@@ -59,7 +59,9 @@ Disabling local AI changes the stored provider to `none` and asks the browser to
 optional origin permission plus Firefox's optional website-content data consent. TraceMark checks
 the applicable grants again before every Ollama request and sends nothing if a grant is missing,
 unsupported, or revoked. Browser settings remain the authoritative place to inspect or revoke
-extension permissions.
+extension permissions. If removal fails or TraceMark reloads while disabled with a residual Local
+AI grant, the library exposes an explicit retry and prevents re-enabling until cleanup succeeds; it
+does not automatically remove the grant on load.
 
 ## Data sharing and sale
 

@@ -1,4 +1,11 @@
-import { mkdir, mkdtemp, readFile, rename, rm, stat } from 'node:fs/promises';
+import {
+  mkdir,
+  mkdtemp,
+  readFile,
+  rename as renamePath,
+  rm as removePath,
+  stat,
+} from 'node:fs/promises';
 import type { AddressInfo } from 'node:net';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -16,7 +23,18 @@ interface PngDetails {
   width: number;
   height: number;
   size: number;
+  imageDataSize: number;
 }
+
+export interface ScreenshotFileOperations {
+  rename(from: string, to: string): Promise<void>;
+  remove(path: string, options: { recursive: true; force: true }): Promise<void>;
+}
+
+const screenshotFileOperations: ScreenshotFileOperations = {
+  rename: renamePath,
+  remove: removePath,
+};
 
 const PNG_SIGNATURE = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
 const MINIMUM_ASSET_SIZE = 10_000;
@@ -42,35 +60,7 @@ function crc32(contents: Buffer): number {
   return (crc ^ 0xffffffff) >>> 0;
 }
 
-function scanlineSizes(
-  width: number,
-  height: number,
-  bitsPerPixel: number,
-  interlaced: boolean,
-): number[] {
-  if (!interlaced)
-    return Array.from({ length: height }, () => Math.ceil((width * bitsPerPixel) / 8));
-
-  const passes = [
-    [0, 0, 8, 8],
-    [4, 0, 8, 8],
-    [0, 4, 4, 8],
-    [2, 0, 4, 4],
-    [0, 2, 2, 4],
-    [1, 0, 2, 2],
-    [0, 1, 1, 2],
-  ] as const;
-  const sizes: number[] = [];
-  for (const [startX, startY, stepX, stepY] of passes) {
-    const passWidth = width <= startX ? 0 : Math.ceil((width - startX) / stepX);
-    const passHeight = height <= startY ? 0 : Math.ceil((height - startY) / stepY);
-    const bytes = Math.ceil((passWidth * bitsPerPixel) / 8);
-    for (let row = 0; row < passHeight && passWidth > 0; row += 1) sizes.push(bytes);
-  }
-  return sizes;
-}
-
-function decodePng(contents: Buffer): { width: number; height: number } {
+function decodePng(contents: Buffer): { width: number; height: number; imageDataSize: number } {
   if (contents.length < 8 || !contents.subarray(0, 8).equals(PNG_SIGNATURE)) {
     throw new Error('not a PNG file');
   }
@@ -78,10 +68,9 @@ function decodePng(contents: Buffer): { width: number; height: number } {
   let offset = PNG_SIGNATURE.length;
   let width = 0;
   let height = 0;
-  let bitsPerPixel = 0;
-  let interlaced = false;
   let sawHeader = false;
   let sawEnd = false;
+  let imageDataSize = 0;
   const compressed: Buffer[] = [];
 
   while (offset < contents.length) {
@@ -109,42 +98,31 @@ function decodePng(contents: Buffer): { width: number; height: number } {
       sawHeader = true;
       width = data.readUInt32BE(0);
       height = data.readUInt32BE(4);
-      const bitDepth = data[8]!;
-      const colorType = data[9]!;
-      const samplesByColorType = new Map([
-        [0, 1],
-        [2, 3],
-        [3, 1],
-        [4, 2],
-        [6, 4],
-      ]);
-      const allowedDepths = new Map<number, number[]>([
-        [0, [1, 2, 4, 8, 16]],
-        [2, [8, 16]],
-        [3, [1, 2, 4, 8]],
-        [4, [8, 16]],
-        [6, [8, 16]],
-      ]);
       if (
         width === 0 ||
         height === 0 ||
-        !allowedDepths.get(colorType)?.includes(bitDepth) ||
+        data[8] !== 8 ||
+        data[9] !== 2 ||
         data[10] !== 0 ||
         data[11] !== 0 ||
-        (data[12] !== 0 && data[12] !== 1)
+        data[12] !== 0
       ) {
-        throw new Error('PNG has unsupported or invalid image parameters');
+        throw new Error('PNG must be non-interlaced 8-bit RGB with standard compression');
       }
-      bitsPerPixel = bitDepth * samplesByColorType.get(colorType)!;
-      interlaced = data[12] === 1;
     } else if (type === 'IDAT') {
+      if (!sawHeader || sawEnd) throw new Error('PNG has an invalid chunk order');
       compressed.push(data);
+      imageDataSize += data.length;
     } else if (type === 'IEND') {
-      if (length !== 0) throw new Error('PNG has an invalid IEND chunk');
+      if (!sawHeader || compressed.length === 0 || sawEnd || length !== 0) {
+        throw new Error('PNG has an invalid IEND chunk order');
+      }
       sawEnd = true;
       offset = chunkEnd;
       if (offset !== contents.length) throw new Error('PNG has trailing data after IEND');
       break;
+    } else {
+      throw new Error(`PNG contains unsupported ${type} chunk`);
     }
     offset = chunkEnd;
   }
@@ -152,8 +130,8 @@ function decodePng(contents: Buffer): { width: number; height: number } {
   if (!sawHeader || compressed.length === 0 || !sawEnd) {
     throw new Error('PNG is missing required image chunks');
   }
-  const rowSizes = scanlineSizes(width, height, bitsPerPixel, interlaced);
-  const decodedSize = rowSizes.reduce((total, size) => total + size + 1, 0);
+  const rowSize = width * 3;
+  const decodedSize = height * (rowSize + 1);
   if (!Number.isSafeInteger(decodedSize) || decodedSize > MAXIMUM_DECODED_SIZE) {
     throw new Error('PNG decoded image is too large');
   }
@@ -166,12 +144,12 @@ function decodePng(contents: Buffer): { width: number; height: number } {
   }
   if (decoded.length !== decodedSize) throw new Error('PNG decoded image data has the wrong size');
   let decodedOffset = 0;
-  for (const rowSize of rowSizes) {
+  for (let row = 0; row < height; row += 1) {
     const filter = decoded[decodedOffset];
     if (filter === undefined || filter > 4) throw new Error('PNG has an invalid scanline filter');
     decodedOffset += rowSize + 1;
   }
-  return { width, height };
+  return { width, height, imageDataSize };
 }
 
 export async function inspectPng(filePath: string): Promise<PngDetails> {
@@ -181,6 +159,7 @@ export async function inspectPng(filePath: string): Promise<PngDetails> {
     width: decoded.width,
     height: decoded.height,
     size: metadata.size,
+    imageDataSize: decoded.imageDataSize,
   };
 }
 
@@ -195,9 +174,9 @@ export async function validateScreenshotAssets(rootDirectory = process.cwd()): P
           `${asset.path}: expected ${asset.width}x${asset.height}, received ${details.width}x${details.height}`,
         );
       }
-      if (details.size < MINIMUM_ASSET_SIZE) {
+      if (details.imageDataSize < MINIMUM_ASSET_SIZE) {
         issues.push(
-          `${asset.path}: file is too small (${details.size.toLocaleString('en-US')} bytes; minimum ${MINIMUM_ASSET_SIZE.toLocaleString('en-US')})`,
+          `${asset.path}: compressed image data is too small (${details.imageDataSize.toLocaleString('en-US')} bytes; minimum ${MINIMUM_ASSET_SIZE.toLocaleString('en-US')})`,
         );
       }
     } catch (error) {
@@ -213,6 +192,7 @@ export async function validateScreenshotAssets(rootDirectory = process.cwd()): P
 export async function stageAndPromoteScreenshotAssets(
   rootDirectory: string,
   capture: (stagedRoot: string) => Promise<void>,
+  fileOperations: ScreenshotFileOperations = screenshotFileOperations,
 ): Promise<void> {
   const docsDirectory = resolve(rootDirectory, 'docs');
   await mkdir(docsDirectory, { recursive: true });
@@ -222,6 +202,7 @@ export async function stageAndPromoteScreenshotAssets(
   const canonicalImages = resolve(rootDirectory, 'docs', 'images');
   const previousImages = join(transactionDirectory, 'previous-images');
   let backedUp = false;
+  let preserveRecovery = false;
 
   try {
     await mkdir(stagedImages, { recursive: true });
@@ -232,23 +213,24 @@ export async function stageAndPromoteScreenshotAssets(
     }
 
     try {
-      await rename(canonicalImages, previousImages);
+      await fileOperations.rename(canonicalImages, previousImages);
       backedUp = true;
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
     }
 
     try {
-      await rename(stagedImages, canonicalImages);
+      await fileOperations.rename(stagedImages, canonicalImages);
     } catch (promotionError) {
       if (backedUp) {
         try {
-          await rename(previousImages, canonicalImages);
+          await fileOperations.rename(previousImages, canonicalImages);
           backedUp = false;
         } catch (rollbackError) {
+          preserveRecovery = true;
           throw new AggregateError(
             [promotionError, rollbackError],
-            'Screenshot promotion and rollback both failed',
+            `Screenshot promotion and rollback both failed. Previous screenshots are preserved at ${previousImages}`,
             { cause: rollbackError },
           );
         }
@@ -256,7 +238,9 @@ export async function stageAndPromoteScreenshotAssets(
       throw promotionError;
     }
   } finally {
-    await rm(transactionDirectory, { recursive: true, force: true });
+    if (!preserveRecovery) {
+      await fileOperations.remove(transactionDirectory, { recursive: true, force: true });
+    }
   }
 }
 

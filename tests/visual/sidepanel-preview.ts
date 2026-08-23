@@ -164,5 +164,6 @@ mount(App, {
     rollbackLocalAIPermissions: async () => true,
     removeLocalAIPermissions: async () => true,
     hasLocalAIPermissions: async () => true,
+    hasAnyLocalAIPermissions: async () => false,
   },
 });

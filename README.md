@@ -121,7 +121,10 @@ are separate components whose trustworthiness you must assess. See the
 Disabling local AI first saves the disabled preference and then asks the browser to remove the
 optional Ollama origin permission and, on Firefox, the optional website-content data consent.
 TraceMark rechecks both applicable grants before every request and fails closed if either was
-revoked in browser settings.
+revoked in browser settings. If permission cleanup fails, or a disabled library reloads with a
+residual Local AI grant, TraceMark shows **Retry permission removal** and blocks re-enabling until
+the user explicitly completes cleanup; it does not remove a residual grant merely because the
+library loaded.
 
 ## Browser limitations
 

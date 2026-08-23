@@ -1,7 +1,8 @@
 export const OLLAMA_PERMISSION_ORIGIN = 'http://127.0.0.1:11434/*';
 export const FIREFOX_WEBSITE_CONTENT_PERMISSION = 'websiteContent';
 
-export type LocalAIPermissionRequestResult = 'granted' | 'denied' | 'unsupported';
+export type LocalAIPermissionRequestResult =
+  'granted' | 'denied' | 'unsupported' | 'cleanup-required';
 
 interface PermissionSet {
   origins?: string[];
@@ -20,6 +21,7 @@ export interface LocalAIPermissionManager {
   request(): Promise<LocalAIPermissionRequestResult>;
   rollbackRequest(): Promise<boolean>;
   has(): Promise<boolean>;
+  hasAny(): Promise<boolean>;
   remove(): Promise<boolean>;
 }
 
@@ -67,7 +69,7 @@ export function createLocalAIPermissionManager(
 
   return {
     async request() {
-      acquiredByLastRequest = [];
+      if (acquiredByLastRequest.length > 0) return 'cleanup-required';
       if (!firefox) {
         try {
           if (await permissions.contains(originPermission)) return 'granted';
@@ -131,6 +133,27 @@ export function createLocalAIPermissionManager(
       }
     },
 
+    async hasAny() {
+      let hasOrigin: boolean;
+      try {
+        hasOrigin = await permissions.contains(originPermission);
+      } catch {
+        return false;
+      }
+      if (!firefox) return hasOrigin;
+      if (typeof permissions.getAll !== 'function') return hasOrigin;
+      try {
+        const granted = await permissions.getAll();
+        return (
+          hasOrigin ||
+          (supportsDataCollection(granted) &&
+            granted.data_collection.includes(FIREFOX_WEBSITE_CONTENT_PERMISSION))
+        );
+      } catch {
+        return hasOrigin;
+      }
+    },
+
     async remove() {
       let hasOrigin = false;
       let originInspected = false;
@@ -159,7 +182,9 @@ export function createLocalAIPermissionManager(
       }
 
       if (!originInspected || (firefox && dataCollection === undefined)) return false;
-      return removeSets(permissionSets);
+      const removed = await removeSets(permissionSets);
+      if (removed) acquiredByLastRequest = [];
+      return removed;
     },
   };
 }

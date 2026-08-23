@@ -57,6 +57,11 @@ before every Ollama request. If the browser does not expose built-in data consen
 is revoked outside TraceMark, transmission fails closed. Disabling local AI separately removes the
 origin and website-content consent. Chromium requests and checks only the optional origin.
 
+Failed removal remains recoverable: the disabled library blocks **Enable local AI** and exposes
+**Retry permission removal** until cleanup succeeds. On reload, TraceMark reconciles the disabled
+preference with applicable browser grants and surfaces the same explicit cleanup control without
+automatically removing a grant.
+
 ## Permissions TraceMark does not request
 
 The built manifests do not contain:

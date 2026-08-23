@@ -264,14 +264,37 @@ describe('research library side panel', () => {
 
     await fireEvent.click(screen.getByRole('button', { name: 'Enable local AI' }));
     const retry = await screen.findByRole('button', { name: 'Retry permission removal' });
+    const enable = screen.getByRole('button', { name: 'Enable local AI' });
 
     expect(screen.getByRole('alert')).toHaveTextContent(/permission could not be removed/i);
+    expect(enable).toBeDisabled();
+    await fireEvent.click(enable);
+    expect(requestLocalAIPermissions).toHaveBeenCalledOnce();
     await fireEvent.click(retry);
     await waitFor(() => expect(rollbackLocalAIPermissions).toHaveBeenCalledTimes(2));
     await waitFor(() =>
       expect(screen.queryByRole('button', { name: 'Retry permission removal' })).toBeNull(),
     );
     expect(screen.getByText('Disabled')).toBeInTheDocument();
+  });
+
+  test('reload with disabled settings surfaces residual permission cleanup without auto-removing', async () => {
+    const request = libraryRequest();
+    const hasAnyLocalAIPermissions = vi.fn().mockResolvedValue(true);
+    const removeLocalAIPermissions = vi.fn().mockResolvedValue(true);
+    render(App, {
+      props: { request, hasAnyLocalAIPermissions, removeLocalAIPermissions },
+    });
+
+    const retry = await screen.findByRole('button', { name: 'Retry permission removal' });
+    const enable = screen.getByRole('button', { name: 'Enable local AI' });
+    expect(enable).toBeDisabled();
+    expect(removeLocalAIPermissions).not.toHaveBeenCalled();
+
+    await fireEvent.click(retry);
+
+    await waitFor(() => expect(removeLocalAIPermissions).toHaveBeenCalledOnce());
+    await waitFor(() => expect(enable).toBeEnabled());
   });
 
   test('disables AI before attempting to remove Ollama permission', async () => {

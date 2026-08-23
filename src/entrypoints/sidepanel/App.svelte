@@ -42,6 +42,7 @@
     rollbackLocalAIPermissions?: () => Promise<boolean>;
     removeLocalAIPermissions?: () => Promise<boolean>;
     hasLocalAIPermissions?: () => Promise<boolean>;
+    hasAnyLocalAIPermissions?: () => Promise<boolean>;
   }
 
   let defaultPermissionManager: LocalAIPermissionManager | undefined;
@@ -59,6 +60,7 @@
     rollbackLocalAIPermissions = () => localAIPermissions().rollbackRequest(),
     removeLocalAIPermissions = () => localAIPermissions().remove(),
     hasLocalAIPermissions = () => localAIPermissions().has(),
+    hasAnyLocalAIPermissions = () => localAIPermissions().hasAny(),
   }: Props = $props();
   let highlights = $state<Highlight[]>([]);
   let collections = $state<Collection[]>([]);
@@ -137,6 +139,7 @@
       aiProvider = savedSettings.ai.provider;
       aiModel = savedSettings.ai.model;
       persistedAIModel = savedSettings.ai.model;
+      await reconcileDisabledLocalAIPermissions();
       collections = savedCollections;
       knownTags = savedTags;
       await loadResearch();
@@ -348,6 +351,7 @@
   }
 
   async function enableLocalAI(): Promise<void> {
+    if (permissionRemovalPending) return;
     aiBusy = true;
     aiError = '';
     const model = ModelNameSchema.safeParse(aiModel);
@@ -370,6 +374,13 @@
     if (permissionResult === 'unsupported') {
       aiError =
         'Firefox data-consent support is unavailable in this version. Local AI remains disabled.';
+      aiBusy = false;
+      return;
+    }
+    if (permissionResult === 'cleanup-required') {
+      permissionRemovalPending = true;
+      permissionRemovalMode = 'rollback';
+      aiError = 'Remove the outstanding Local AI permission before enabling again.';
       aiBusy = false;
       return;
     }
@@ -487,6 +498,20 @@
       return await removeLocalAIPermissions();
     } catch {
       return false;
+    }
+  }
+
+  async function reconcileDisabledLocalAIPermissions(): Promise<void> {
+    if (aiProvider !== 'none') return;
+    try {
+      if (await hasAnyLocalAIPermissions()) {
+        permissionRemovalPending = true;
+        permissionRemovalMode = 'remove';
+        aiError =
+          'Local AI is disabled, but browser permission remains. Remove it before enabling again.';
+      }
+    } catch {
+      // A later explicit enable or cleanup action will check the browser again.
     }
   }
 
@@ -728,7 +753,7 @@
           <button
             type="button"
             class="primary-button"
-            disabled={aiBusy || phase === 'loading' || !aiModel.trim()}
+            disabled={aiBusy || permissionRemovalPending || phase === 'loading' || !aiModel.trim()}
             onclick={() => void enableLocalAI()}>Enable local AI</button
           >
         {/if}

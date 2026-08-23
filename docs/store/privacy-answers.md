@@ -75,7 +75,7 @@ Use these exact explanations if AMO requests clarification:
 ```text
 Required data collection: none. TraceMark stores saved research in the local Firefox profile and does not transmit it to a TraceMark-operated service.
 
-Optional website content: only after the user chooses Enable Local AI and separately approves Firefox's optional website-content data consent and optional http://127.0.0.1:11434/* origin, TraceMark sends the stored fields of user-selected saved quotations to an Ollama process on the same device for the requested action. TraceMark rechecks both grants before every request and sends nothing if either grant is missing, unsupported, or revoked. Choosing Disable Local AI removes both grants separately. Local AI is disabled by default and is not required for capture, library, search, marking, backup, or export.
+Optional website content: only after the user chooses Enable Local AI and separately approves Firefox's optional website-content data consent and optional http://127.0.0.1:11434/* origin, TraceMark sends the stored fields of user-selected saved quotations to an Ollama process on the same device for the requested action. TraceMark rechecks both grants before every request and sends nothing if either grant is missing, unsupported, or revoked. Choosing Disable Local AI removes both grants separately. If cleanup fails or disabled settings reload with a residual grant, TraceMark exposes an explicit retry and blocks re-enabling; it does not remove the grant automatically on load. Local AI is disabled by default and is not required for capture, library, search, marking, backup, or export.
 ```
 
 Required extension-permission explanations match the Chrome answers for `activeTab`, `scripting`,

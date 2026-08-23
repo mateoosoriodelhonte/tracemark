@@ -75,6 +75,32 @@ describe('local AI browser permissions', () => {
     expect(api.remove).toHaveBeenLastCalledWith({ data_collection: ['websiteContent'] });
   });
 
+  test('a new enable attempt cannot erase an outstanding failed rollback', async () => {
+    const api = permissionApi({ origins: [], permissions: [], data_collection: [] });
+    api.request.mockResolvedValueOnce(true).mockResolvedValueOnce(false);
+    api.remove.mockResolvedValue(false);
+    const manager = createLocalAIPermissionManager(api, true);
+
+    await expect(manager.request()).resolves.toBe('denied');
+    await expect(manager.request()).resolves.toBe('cleanup-required');
+
+    expect(api.request).toHaveBeenCalledTimes(2);
+    expect(api.remove).toHaveBeenCalledOnce();
+  });
+
+  test('a new manager detects residual Firefox consent while local AI is disabled', async () => {
+    const api = permissionApi({
+      origins: [],
+      permissions: [],
+      data_collection: ['websiteContent'],
+    });
+    const manager = createLocalAIPermissionManager(api, true);
+
+    await expect(manager.hasAny()).resolves.toBe(true);
+
+    expect(api.remove).not.toHaveBeenCalled();
+  });
+
   test('Firefox preserves pre-existing website consent when origin access is denied', async () => {
     const api = permissionApi({
       origins: [],
