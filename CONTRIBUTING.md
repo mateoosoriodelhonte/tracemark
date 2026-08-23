@@ -61,6 +61,20 @@ packaged tests described in [docs/TESTING.md](docs/TESTING.md). Capture and anch
 the manual browser-gesture checklist because WebDriver does not prove browser-chrome `activeTab`
 gestures.
 
+## Commit conventions
+
+- Keep each commit focused on one reviewable purpose and use an imperative subject line.
+- Prefer the established `feat:`, `fix:`, `docs:`, `test:`, `refactor:`, and `chore:` prefixes.
+- Separate documentation corrections from product behavior changes when they can be reviewed and
+  reverted independently.
+- Do not commit generated `.output/` files, downloaded archives, browser profiles, or local test
+  artifacts.
+- Use a Git email connected to your GitHub account when you want GitHub to attribute the commit to
+  your profile.
+
+Documentation-only commits still run `pnpm format:check` and `pnpm docs:links`. Run `pnpm check`
+before merging so a documentation change cannot accidentally bypass the repository-wide gate.
+
 ## Pull requests
 
 A pull request should:
