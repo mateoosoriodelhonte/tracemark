@@ -88,14 +88,7 @@ jobs:
           pnpm package:checksums
 
       - name: Check tracked files for secret patterns
-        shell: bash
-        run: |
-          # Credential-length suffixes keep documented detector prefixes from becoming false positives.
-          if matches=$(git grep -IlE '(gho_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|sk-[A-Za-z0-9_-]{20,}|BEGIN (RSA|OPENSSH) PRIVATE KEY)' -- . ':!pnpm-lock.yaml'); then
-            echo 'Potential secret pattern found in tracked files:'
-            printf '%s\n' "$matches"
-            exit 1
-          fi
+        run: pnpm secrets:scan
 
       - name: Inspect release archive listings
         run: |

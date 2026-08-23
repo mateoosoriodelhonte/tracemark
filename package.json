@@ -20,6 +20,7 @@
     "package:validate": "node --experimental-strip-types scripts/validate-packages.ts",
     "package:checksums": "node --experimental-strip-types scripts/create-checksums.ts",
     "docs:links": "node --experimental-strip-types scripts/validate-doc-links.ts",
+    "secrets:scan": "node --experimental-strip-types scripts/scan-secrets.ts",
     "screenshots": "node --experimental-strip-types scripts/capture-screenshots.ts",
     "screenshots:check": "node --experimental-strip-types scripts/capture-screenshots.ts --check",
     "test:e2e:packages": "vitest run tests/e2e/manifest-packages.test.ts",
@@ -34,7 +35,7 @@
     "format:check": "prettier --check .",
     "check:manifests": "vitest run tests/manifest.test.ts",
     "lint:firefox": "web-ext lint --source-dir .output/firefox-mv3 --output text",
-    "check": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm package:build && pnpm test && pnpm package:validate && pnpm package:checksums && pnpm lint:firefox && pnpm docs:links && pnpm screenshots:check",
+    "check": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm secrets:scan && pnpm package:build && pnpm test && pnpm package:validate && pnpm package:checksums && pnpm lint:firefox && pnpm docs:links && pnpm screenshots:check",
     "postinstall": "wxt prepare"
   },
   "dependencies": {

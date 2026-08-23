@@ -29,18 +29,19 @@ on macOS arm64. The Firefox test also works with `FIREFOX_BIN` set to an explici
 | Release ZIP contract                                             | `pnpm package:build && pnpm test:e2e:packages && pnpm package:validate` |
 | Browser archive checksums                                        | `pnpm package:checksums`                                                |
 | Tracked relative Markdown links                                  | `pnpm docs:links`                                                       |
+| Tracked source secret patterns                                   | `pnpm secrets:scan`                                                     |
 | Deterministic store assets                                       | `pnpm screenshots && pnpm screenshots:check`                            |
 | Packaged Chromium                                                | `pnpm test:e2e:chromium`                                                |
 | Packaged Firefox, normal local run                               | `pnpm test:e2e:firefox`                                                 |
 | Packaged Firefox, strict release run                             | `pnpm test:e2e:firefox:release`                                         |
 
 `pnpm check` is the repository quality gate. It runs formatting verification, lint, type checking,
-both production package builds, the full Vitest suite, release-package validation, browser-archive
-checksum creation, `web-ext lint` against the generated Firefox directory, tracked relative-link
-validation, and screenshot validation. It creates the exact required ZIPs before any ZIP-dependent
-test, so `pnpm check` is self-sufficient when `.output` contains no prior archives. Packaged Chromium
-and Firefox execution remain separate because they require installed browsers and, for Firefox, a
-compatible WebDriver environment.
+tracked-source secret scanning, both production package builds, the full Vitest suite,
+release-package validation, browser-archive checksum creation, `web-ext lint` against the generated
+Firefox directory, tracked relative-link validation, and screenshot validation. It creates the exact
+required ZIPs before any ZIP-dependent test, so `pnpm check` is self-sufficient when `.output`
+contains no prior archives. Packaged Chromium and Firefox execution remain separate because they
+require installed browsers and, for Firefox, a compatible WebDriver environment.
 
 ## Recorded v1.0.0 release gate
 
@@ -48,14 +49,14 @@ The local release gate was recorded on 2026-08-22 on macOS arm64 with Node.js 26
 Playwright 1.62.1, Firefox 154.0, and geckodriver 0.37.1. Generated archives were removed before
 `pnpm check` to rule out a stale-artifact pass.
 
-| Evidence                      | Recorded result                                                                                                              |
-| ----------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
-| Archive-free `pnpm check`     | 31 Vitest files and 245 tests passed; format, lint, typecheck, package validation, checksums, links, and screenshots passed. |
-| Packaged Chromium             | 2 Playwright tests passed against a fresh profile and the real unpacked Chrome MV3 build.                                    |
-| Packaged Firefox strict run   | Firefox 154.0 temporarily installed the exact Firefox ZIP; packaged manifest, startup, library, edit, and exports passed.    |
-| Deterministic store assets    | All 4 assets regenerated and then passed structural/dimension check mode.                                                    |
-| `web-ext lint`                | 0 errors, 0 notices, and 1 warning in WXT's generated Svelte client chunk for dynamic `innerHTML` assignment.                |
-| Documentation and secret gate | All tracked relative Markdown links resolved; the tracked-file secret-pattern scan reported no release-source matches.       |
+| Evidence                      | Recorded result                                                                                                                 |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| Archive-free `pnpm check`     | 32 Vitest files and 253 tests passed; format, lint, typecheck, secret scan, packages, checksums, links, and screenshots passed. |
+| Packaged Chromium             | 2 Playwright tests passed against a fresh profile and the real unpacked Chrome MV3 build.                                       |
+| Packaged Firefox strict run   | Firefox 154.0 temporarily installed the exact Firefox ZIP; packaged manifest, startup, library, edit, and exports passed.       |
+| Deterministic store assets    | All 4 assets regenerated and then passed structural/dimension check mode.                                                       |
+| `web-ext lint`                | 0 errors, 0 notices, and 1 warning in WXT's generated Svelte client chunk for dynamic `innerHTML` assignment.                   |
+| Documentation and secret gate | All tracked relative Markdown links resolved; the tracked-file secret-pattern scan reported no release-source matches.          |
 
 The final browser release inventory is:
 
