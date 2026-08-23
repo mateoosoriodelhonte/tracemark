@@ -1,0 +1,38 @@
+version: 2
+updates:
+  - package-ecosystem: 'npm'
+    directory: '/'
+    schedule:
+      interval: 'daily'
+    open-pull-requests-limit: 1
+    allow:
+      - dependency-name: 'fake-indexeddb'
+        update-types:
+          - 'version-update:semver-minor'
+          - 'version-update:semver-patch'
+      - dependency-name: 'eslint'
+        update-types:
+          - 'version-update:semver-minor'
+          - 'version-update:semver-patch'
+      - dependency-name: 'svelte-check'
+        update-types:
+          - 'version-update:semver-minor'
+          - 'version-update:semver-patch'
+      - dependency-name: 'web-ext'
+        update-types:
+          - 'version-update:semver-minor'
+          - 'version-update:semver-patch'
+    groups:
+      quality-tooling:
+        applies-to: 'version-updates'
+        dependency-type: 'development'
+        patterns:
+          - 'fake-indexeddb'
+          - 'eslint'
+          - 'svelte-check'
+          - 'web-ext'
+        update-types:
+          - 'minor'
+          - 'patch'
+    commit-message:
+      prefix: 'chore'
