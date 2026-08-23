@@ -4,6 +4,12 @@ import { createRequire } from 'node:module';
 import { mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
+import {
+  assertLocalSeleniumEnvironment,
+  isUnavailablePrerequisite,
+  runWithFirefoxResources,
+  shouldSkipFirefoxPrerequisite,
+} from './firefox-harness.ts';
 import { startFixtureServer } from './server.ts';
 
 const require = createRequire(import.meta.url);
@@ -15,6 +21,7 @@ type SeleniumLocator = ReturnType<typeof By.css>;
 const FIREFOX_ARCHIVE = resolve('.output/tracemark-1.0.0-firefox.zip');
 const ADDON_ID = 'tracemark@mateoosoriodelhonte.github.io';
 const EXTENSION_UUID = '6f3f6066-69e2-48c0-9d55-f273a22a830e';
+const PACKAGED_LIBRARY_URL = `moz-extension://${EXTENSION_UUID}/sidepanel.html`;
 const ARTICLE_QUOTE = 'retrieval quality matters';
 const HOSTILE_QUOTE = '<img src=x onerror=alert(1)>';
 const EDITED_NOTE = 'Edited through the packaged Firefox research library.';
@@ -177,25 +184,8 @@ function prerequisiteMessage(cause: unknown): string {
   ].join(' ');
 }
 
-function isUnavailablePrerequisite(cause: unknown): boolean {
-  const messages: string[] = [];
-  let current = cause;
-  while (current instanceof Error) {
-    messages.push(current.message);
-    current = current.cause;
-  }
-  const detail = messages.join(' ');
-  return [
-    /unable to obtain browser driver/iu,
-    /browser path does not exist/iu,
-    /could not locate firefox/iu,
-    /firefox binary.*(?:not found|does not exist)/iu,
-    /geckodriver.*(?:not found|not available|path)/iu,
-    /driver executable.*(?:not found|path)/iu,
-  ].some((pattern) => pattern.test(detail));
-}
-
 async function createDriver(profileDirectory: string, downloadDirectory: string) {
+  assertLocalSeleniumEnvironment(process.env);
   const options = new firefox.Options()
     .addArguments('-headless')
     .setProfile(profileDirectory)
@@ -213,6 +203,7 @@ async function createDriver(profileDirectory: string, downloadDirectory: string)
 
   try {
     return await new Builder()
+      .disableEnvironmentOverrides()
       .forBrowser('firefox')
       .setFirefoxOptions(options)
       .setFirefoxService(service)
@@ -223,7 +214,7 @@ async function createDriver(profileDirectory: string, downloadDirectory: string)
     const message = unavailable
       ? prerequisiteMessage(cause)
       : `Firefox WebDriver session construction failed for a reason that is not eligible for a prerequisite skip: ${cause instanceof Error ? cause.message : String(cause)}`;
-    const maySkip = process.env.TRACEMARK_FIREFOX_ALLOW_SKIP === '1' && !strict && unavailable;
+    const maySkip = shouldSkipFirefoxPrerequisite(cause, process.env);
     if (maySkip) {
       console.warn(`SKIP: ${message}`);
       return undefined;
@@ -237,19 +228,19 @@ async function createDriver(profileDirectory: string, downloadDirectory: string)
   }
 }
 
-async function openPackagedPage(driver: SeleniumDriver, url: string): Promise<void> {
+async function openPackagedPage(driver: SeleniumDriver): Promise<void> {
   await driver.setContext(firefox.Context.CHROME);
   try {
     await driver.executeScript(
       `gBrowser.selectedBrowser.loadURI(Services.io.newURI(arguments[0]), {
         triggeringPrincipal: Services.scriptSecurityManager.getSystemPrincipal(),
       });`,
-      url,
+      PACKAGED_LIBRARY_URL,
     );
   } finally {
     await driver.setContext(firefox.Context.CONTENT);
   }
-  await driver.wait(until.urlIs(url), WAIT_MS);
+  await driver.wait(until.urlIs(PACKAGED_LIBRARY_URL), WAIT_MS);
 }
 
 async function exercisePackagedLibrary(
@@ -257,7 +248,7 @@ async function exercisePackagedLibrary(
   backupPath: string,
   downloadDirectory: string,
 ) {
-  await openPackagedPage(driver, `moz-extension://${EXTENSION_UUID}/sidepanel.html`);
+  await openPackagedPage(driver);
   await driver.wait(until.titleIs('TraceMark Research Library'), WAIT_MS);
   assert.equal(await driver.getTitle(), 'TraceMark Research Library');
   const heading = await visibleElement(driver, By.css('h1'));
@@ -346,39 +337,41 @@ async function exercisePackagedLibrary(
 }
 
 async function main(): Promise<void> {
+  assertLocalSeleniumEnvironment(process.env);
   assertFirefoxManifest(readArchiveManifest());
-  const temporaryRoot = await mkdtemp(join(tmpdir(), 'tracemark-firefox-'));
-  const profileDirectory = join(temporaryRoot, 'profile');
-  const downloadDirectory = join(temporaryRoot, 'downloads');
-  await Promise.all([mkdir(profileDirectory), mkdir(downloadDirectory)]);
-  const fixtureServer = await startFixtureServer();
-  const backupPath = join(temporaryRoot, 'packaged-e2e-seed.json');
-  await writeFile(backupPath, seedBackup(fixtureServer.origin));
-  let driver: SeleniumDriver | undefined;
+  await runWithFirefoxResources({
+    createRoot: () => mkdtemp(join(tmpdir(), 'tracemark-firefox-')),
+    removeRoot: (root) => rm(root, { force: true, recursive: true }),
+    async setup({ root, attachServer }) {
+      const profileDirectory = join(root, 'profile');
+      const downloadDirectory = join(root, 'downloads');
+      await Promise.all([mkdir(profileDirectory), mkdir(downloadDirectory)]);
+      const fixtureServer = await startFixtureServer();
+      attachServer(fixtureServer);
+      await writeFile(join(root, 'packaged-e2e-seed.json'), seedBackup(fixtureServer.origin));
+    },
+    async execute({ root, attachDriver }) {
+      const profileDirectory = join(root, 'profile');
+      const downloadDirectory = join(root, 'downloads');
+      const backupPath = join(root, 'packaged-e2e-seed.json');
+      const driver: SeleniumDriver | undefined = await createDriver(
+        profileDirectory,
+        downloadDirectory,
+      );
+      if (driver === undefined) return;
+      attachDriver(driver);
 
-  try {
-    driver = await createDriver(profileDirectory, downloadDirectory);
-    if (driver === undefined) return;
-
-    const capabilities = await driver.getCapabilities();
-    const browserVersion = String(capabilities.get('browserVersion') ?? 'unknown');
-    const installedId = await driver.installAddon(FIREFOX_ARCHIVE, true);
-    assert.equal(installedId, ADDON_ID);
-    await exercisePackagedLibrary(driver, backupPath, downloadDirectory);
-    console.log(`Firefox ${browserVersion}: temporarily installed ${installedId}.`);
-    console.log(
-      'PASS: packaged manifest/startup/sidebar, import, library, search, edit, inert rendering, JSON export, and Markdown export.',
-    );
-  } finally {
-    try {
-      if (driver !== undefined) await driver.quit();
-    } finally {
-      await Promise.all([
-        fixtureServer.close(),
-        rm(temporaryRoot, { force: true, recursive: true }),
-      ]);
-    }
-  }
+      const capabilities = await driver.getCapabilities();
+      const browserVersion = String(capabilities.get('browserVersion') ?? 'unknown');
+      const installedId = await driver.installAddon(FIREFOX_ARCHIVE, true);
+      assert.equal(installedId, ADDON_ID);
+      await exercisePackagedLibrary(driver, backupPath, downloadDirectory);
+      console.log(`Firefox ${browserVersion}: temporarily installed ${installedId}.`);
+      console.log(
+        'PASS: packaged manifest/startup/sidebar, import, library, search, edit, inert rendering, JSON export, and Markdown export.',
+      );
+    },
+  });
 }
 
 await main();

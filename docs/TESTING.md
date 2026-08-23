@@ -59,7 +59,9 @@ Firefox profile and download directory, and removes both after Firefox exits. Th
    content context before inspecting it. Firefox 154 rejects direct WebDriver navigation to a
    `moz-extension:` URL, so geckodriver is started with its explicit `--allow-system-access` test
    flag and the known packaged URL is loaded through Firefox chrome context. This opens a page; it
-   does not invoke an extension action or confer `activeTab`.
+   does not invoke an extension action or confer `activeTab`. The harness is local-only: it disables
+   Selenium environment overrides and fails closed if `SELENIUM_REMOTE_URL`, `SELENIUM_SERVER_JAR`,
+   or `SELENIUM_BROWSER` is configured.
 5. Proves background startup through the packaged library's successful initial requests and
    `0 saved quotations.` status.
 6. Uses the real Backup UI to import two strict, deterministic records from the checked-in fixture
