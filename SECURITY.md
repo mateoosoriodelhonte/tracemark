@@ -24,6 +24,22 @@ contact information to arrange a non-public channel. If you cannot safely make e
 request, wait until a private reporting method is published rather than disclosing the vulnerability
 in public.
 
+## Before sending a private report
+
+Use this checklist to make the report actionable without exposing unrelated data:
+
+- reproduce against the latest GitHub release or current `main` in a fresh browser profile;
+- replace saved research, URLs, and imported backups with the smallest harmless fixture that still
+  demonstrates the behavior;
+- record the browser, extension version or commit, operating system, and whether Ollama was enabled;
+- separate directly observed behavior from expected impact or unverified assumptions;
+- keep screenshots, console logs, exported backups, and proof-of-concept files private; and
+- confirm whether the behavior crosses a TraceMark trust boundary documented in
+  [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+
+If a clean-profile reproduction would destroy useful evidence, preserve the evidence first and
+explain why the clean-profile step was skipped.
+
 ## What to include in the private report
 
 - affected version, browser, browser version, and operating system;

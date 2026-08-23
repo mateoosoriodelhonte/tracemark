@@ -9,6 +9,15 @@ cloud sync, or application backend.
 
 ![TraceMark research library with local-first controls and synthetic saved research](docs/images/tracemark-library.png)
 
+## Quick links
+
+- [Download or install TraceMark](#install-for-local-use)
+- [Save, search, mark, and back up research](#use-tracemark)
+- [Configure optional local AI](#optional-local-ai-with-ollama)
+- [Review browser limitations](#browser-limitations)
+- [Develop and test the extension](#development)
+- [Read the privacy, permission, and architecture documents](#privacy-permissions-and-architecture)
+
 ## What it does
 
 - Captures selected text with the page title, source URL, and nearby text context.
@@ -22,10 +31,29 @@ cloud sync, or application backend.
 ## Install for local use
 
 TraceMark 1.0.0 has validated Chrome and Firefox packages, but it is not published in either
-browser store.
+browser store. Download the reviewed artifacts from the
+[TraceMark v1.0.0 GitHub release](https://github.com/mateoosoriodelhonte/tracemark/releases/tag/v1.0.0):
 
-First install [Node.js 22 or newer](https://nodejs.org/) and pnpm 11.19.0, then build both browser
-targets:
+- [Chrome package](https://github.com/mateoosoriodelhonte/tracemark/releases/download/v1.0.0/tracemark-1.0.0-chrome.zip)
+- [Firefox package](https://github.com/mateoosoriodelhonte/tracemark/releases/download/v1.0.0/tracemark-1.0.0-firefox.zip)
+- [SHA-256 checksums](https://github.com/mateoosoriodelhonte/tracemark/releases/download/v1.0.0/SHA256SUMS)
+
+Verify the downloaded browser archive against `SHA256SUMS` before installation.
+
+### Choose an installation path
+
+| Goal                           | Recommended path                                                                                |
+| ------------------------------ | ----------------------------------------------------------------------------------------------- |
+| Try the reviewed Chrome build  | Download, verify, and extract the Chrome ZIP, then load its extracted directory as unpacked.    |
+| Try the reviewed Firefox build | Download and verify the Firefox ZIP; it remains unsigned and is intended for temporary testing. |
+| Develop or audit either build  | Clone the repository and build from source with the pinned Node.js and pnpm versions below.     |
+
+Downloaded release packages do not require Node.js or pnpm. Those tools are required only when
+building or developing TraceMark from source.
+
+### Build from source
+
+Install [Node.js 22 or newer](https://nodejs.org/) and pnpm 11.19.0, then build both browser targets:
 
 ```sh
 pnpm install --frozen-lockfile
@@ -37,7 +65,8 @@ pnpm build:firefox
 
 1. Open `chrome://extensions`.
 2. Enable **Developer mode**.
-3. Choose **Load unpacked** and select `.output/chrome-mv3`.
+3. Choose **Load unpacked** and select `.output/chrome-mv3` for a source build, or the extracted
+   Chrome release-package directory containing `manifest.json`.
 
 Chrome documents this workflow in [Load an unpacked extension](https://developer.chrome.com/docs/extensions/get-started/tutorial/hello-world#load-unpacked).
 
@@ -49,8 +78,9 @@ see Mozilla's
 [signing and distribution overview](https://extensionworkshop.com/documentation/publish/signing-and-distribution-overview/).
 
 For development, open `about:debugging#/runtime/this-firefox`, choose **Load Temporary Add-on**,
-and select `.output/firefox-mv3/manifest.json`. Firefox removes a temporary add-on when Firefox
-restarts. See Mozilla's [temporary installation guide](https://extensionworkshop.com/documentation/develop/temporary-installation-in-firefox/).
+and select `.output/firefox-mv3/manifest.json`, or extract the reviewed Firefox package and select
+its `manifest.json`. Firefox removes a temporary add-on when Firefox restarts. See Mozilla's
+[temporary installation guide](https://extensionworkshop.com/documentation/develop/temporary-installation-in-firefox/).
 
 ## Use TraceMark
 
@@ -168,10 +198,10 @@ For the full test matrix, packaged-browser evidence, and manual browser-gesture 
 
 ## Project status
 
-TraceMark is at version 1.0.0 release-candidate readiness. Chrome and Firefox archives validate,
-and packaged-browser automation covers startup, import, library, search, edit, inert rendering, and
+TraceMark 1.0.0 is published as a GitHub release. Chrome and Firefox archives validate, and
+packaged-browser automation covers startup, import, library, search, edit, inert rendering, and
 exports. Browser-chrome capture, fresh-tab anchor recovery, native panel/sidebar operation, and
-Firefox permission prompts remain integration-tested plus pending manual release checks. Store
+Firefox permission prompts remain integration-tested plus documented manual checks. Browser-store
 submission and publication have not occurred.
 
 ## License
