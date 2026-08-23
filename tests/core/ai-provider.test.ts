@@ -18,23 +18,16 @@ const selectedItem = {
 };
 
 function ollamaResponse(content: Record<string, unknown>): Response {
-  return {
-    ok: true,
-    status: 200,
-    text: vi.fn().mockResolvedValue(
-      JSON.stringify({
-        message: { role: 'assistant', content: JSON.stringify(content) },
-      }),
-    ),
-  } as unknown as Response;
+  return responseWithText(
+    200,
+    JSON.stringify({
+      message: { role: 'assistant', content: JSON.stringify(content) },
+    }),
+  );
 }
 
 function responseWithText(status: number, body: string): Response {
-  return {
-    ok: status >= 200 && status < 300,
-    status,
-    text: vi.fn().mockResolvedValue(body),
-  } as unknown as Response;
+  return new Response(body, { status });
 }
 
 function requestBody(fetchMock: ReturnType<typeof vi.fn>): Record<string, unknown> {
@@ -200,7 +193,38 @@ describe('OllamaProvider validation and failures', () => {
     expect(response.text).not.toHaveBeenCalled();
   });
 
-  test('applies the response limit to UTF-8 bytes in the non-streaming fallback', async () => {
+  test.each([
+    ['absent', new Headers()],
+    ['falsely small', new Headers({ 'content-length': '1' })],
+  ])(
+    'rejects a no-stream response with %s length without calling response.text',
+    async (_, headers) => {
+      const response = {
+        ok: true,
+        status: 200,
+        body: null,
+        headers,
+        text: vi.fn().mockResolvedValue(
+          JSON.stringify({
+            message: {
+              role: 'assistant',
+              content: JSON.stringify({ content: 'Must not be accepted.' }),
+            },
+          }),
+        ),
+      } as unknown as Response;
+      const provider = new OllamaProvider({ fetch: vi.fn().mockResolvedValue(response) });
+
+      await expect(provider.summarize({ items: [selectedItem] }, 'llama3.2')).rejects.toMatchObject(
+        {
+          code: 'AI_INVALID_OUTPUT',
+        },
+      );
+      expect(response.text).not.toHaveBeenCalled();
+    },
+  );
+
+  test('applies the streamed response limit to UTF-8 bytes', async () => {
     const responseBody = JSON.stringify({
       message: {
         role: 'assistant',

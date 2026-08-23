@@ -146,17 +146,8 @@ export class OllamaProvider implements AIProvider {
 
   private async readResponseText(response: Response, controller: AbortController): Promise<string> {
     if (response.body === null || response.body === undefined) {
-      const declaredLength = Number(response.headers?.get('content-length'));
-      if (Number.isFinite(declaredLength) && declaredLength > MAX_RESPONSE_BYTES) {
-        controller.abort();
-        return this.invalidOutput();
-      }
-      const responseText = await response.text();
-      if (new TextEncoder().encode(responseText).byteLength > MAX_RESPONSE_BYTES) {
-        controller.abort();
-        return this.invalidOutput();
-      }
-      return responseText;
+      controller.abort();
+      return this.invalidOutput();
     }
 
     const reader = response.body.getReader();
