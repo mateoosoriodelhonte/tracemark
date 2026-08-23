@@ -4,6 +4,20 @@ TraceMark is a Manifest V3 browser extension built with WXT, TypeScript, Svelte,
 ships browser-specific manifests for Chrome and Firefox while sharing domain, storage, service, and
 UI code.
 
+## Architectural invariants
+
+| Invariant                    | Enforcement                                                                                                    |
+| ---------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| Research is local by default | IndexedDB and `browser.storage.local` hold application state; there is no TraceMark account, backend, or sync. |
+| Website access is temporary  | `activeTab` plus runtime injection replaces static content scripts and standing host permissions.              |
+| Untrusted data is validated  | Zod schemas guard messages, captures, imports, stored records, and optional AI output at each boundary.        |
+| Anchoring prefers refusal    | Exact quotation and context matching returns missing or ambiguous results instead of guessing.                 |
+| Local AI remains optional    | Ollama starts disabled and every applicable browser grant is explicit, revocable, and rechecked per request.   |
+| Users control recovery       | Versioned JSON backups restore local state; Markdown exports provide a readable, non-importable view.          |
+
+Changes that weaken an invariant require an explicit design review, updated threat and permission
+documentation, and regression evidence at the affected boundary.
+
 ## Runtime components
 
 | Component               | Responsibility                                                                                          | Trust level                                      |
