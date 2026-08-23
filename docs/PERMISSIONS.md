@@ -25,6 +25,9 @@ Both browsers declare exactly one optional origin:
 
 Neither build declares a static `host_permissions` value or `content_scripts` entry.
 
+Firefox also declares required data collection `none` and optional built-in data consent
+`websiteContent`. That data consent is not a host permission and is not granted at installation.
+
 ## Why each permission exists
 
 | Permission     | Browser            | Use and boundary                                                                                                                                                             |
@@ -47,6 +50,12 @@ The URL uses HTTP, not HTTPS. Loopback traffic is not encrypted and the permissi
 Ollama process, models, browser, operating system, or other local software trustworthy. Users can
 disable local AI and remove the origin permission through TraceMark; they can also inspect or revoke
 it in browser extension settings.
+
+On Firefox, the **Enable local AI** gesture makes two separate optional permission requests: first
+`data_collection: ["websiteContent"]`, then the exact Ollama origin. TraceMark requires both grants
+before every Ollama request. If the browser does not expose built-in data consent, or either grant
+is revoked outside TraceMark, transmission fails closed. Disabling local AI separately removes the
+origin and website-content consent. Chromium requests and checks only the optional origin.
 
 ## Permissions TraceMark does not request
 

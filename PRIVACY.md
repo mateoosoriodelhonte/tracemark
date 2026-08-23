@@ -42,10 +42,12 @@ See [docs/PERMISSIONS.md](docs/PERMISSIONS.md) for the complete permission ratio
 
 ## Optional Ollama processing
 
-Local AI is disabled by default. Enabling it requires a separate browser prompt for the only
-optional origin, `http://127.0.0.1:11434/*`. For a requested AI action, TraceMark sends only the
-stored internal highlight ID, quotation, title, source URL, tags, and note belonging to the saved
-highlights the user has selected. It sends them to the Ollama chat API at
+Local AI is disabled by default. Enabling it requires a browser prompt for the only optional
+origin, `http://127.0.0.1:11434/*`. Firefox also requests its optional `websiteContent` built-in
+data consent in a separate prompt. Both Firefox grants must exist before TraceMark transmits saved
+research. For a requested AI action, TraceMark sends only the stored internal highlight ID,
+quotation, title, source URL, tags, and note belonging to the saved highlights the user has
+selected. It sends them to the Ollama chat API at
 `http://127.0.0.1:11434/api/chat` and stores the validated result in extension IndexedDB.
 
 Loopback HTTP traffic is local to the device but is not encrypted. TraceMark does not establish
@@ -54,7 +56,9 @@ software. Users should assess those components before enabling local AI. An Olla
 configuration may itself contact other services; that behavior is outside TraceMark's control.
 
 Disabling local AI changes the stored provider to `none` and asks the browser to remove the
-optional origin permission. Browser settings remain the authoritative place to inspect or revoke
+optional origin permission plus Firefox's optional website-content data consent. TraceMark checks
+the applicable grants again before every Ollama request and sends nothing if a grant is missing,
+unsupported, or revoked. Browser settings remain the authoritative place to inspect or revoke
 extension permissions.
 
 ## Data sharing and sale
@@ -66,8 +70,8 @@ content is the optional, explicitly permissioned loopback Ollama endpoint descri
 ## User control
 
 Users can edit or delete saved quotations, manage collections, export JSON or Markdown, import a
-validated JSON backup, disable local AI, and remove the optional Ollama permission. Removing local
-data is subject to the browser's extension-data controls.
+validated JSON backup, disable local AI, and remove the optional Ollama permission and Firefox data
+consent. Removing local data is subject to the browser's extension-data controls.
 
 ## Changes and questions
 

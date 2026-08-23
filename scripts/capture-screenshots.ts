@@ -1,7 +1,8 @@
-import { mkdir, readFile, stat } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rename, rm, stat } from 'node:fs/promises';
 import type { AddressInfo } from 'node:net';
-import { resolve } from 'node:path';
+import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { inflateSync } from 'node:zlib';
 import { chromium, type Browser, type Page } from 'playwright';
 import { createServer, type ViteDevServer } from 'vite';
 
@@ -21,6 +22,7 @@ const PNG_SIGNATURE = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
 const MINIMUM_ASSET_SIZE = 10_000;
 const STORE_SCREENSHOT_VIEWPORT = { width: 1280, height: 800 };
 const PROMO_VIEWPORT = { width: 440, height: 280 };
+const MAXIMUM_DECODED_SIZE = 512 * 1024 * 1024;
 
 export const SCREENSHOT_ASSETS = [
   { path: 'docs/images/tracemark-library.png', width: 1280, height: 800 },
@@ -29,17 +31,155 @@ export const SCREENSHOT_ASSETS = [
   { path: 'docs/images/tracemark-promo-440x280.png', width: 440, height: 280 },
 ] as const satisfies readonly ScreenshotAsset[];
 
-export async function inspectPng(filePath: string): Promise<PngDetails> {
-  const [contents, metadata] = await Promise.all([readFile(filePath), stat(filePath)]);
-  if (contents.length < 24 || !contents.subarray(0, 8).equals(PNG_SIGNATURE)) {
+function crc32(contents: Buffer): number {
+  let crc = 0xffffffff;
+  for (const byte of contents) {
+    crc ^= byte;
+    for (let bit = 0; bit < 8; bit += 1) {
+      crc = (crc >>> 1) ^ (crc & 1 ? 0xedb88320 : 0);
+    }
+  }
+  return (crc ^ 0xffffffff) >>> 0;
+}
+
+function scanlineSizes(
+  width: number,
+  height: number,
+  bitsPerPixel: number,
+  interlaced: boolean,
+): number[] {
+  if (!interlaced)
+    return Array.from({ length: height }, () => Math.ceil((width * bitsPerPixel) / 8));
+
+  const passes = [
+    [0, 0, 8, 8],
+    [4, 0, 8, 8],
+    [0, 4, 4, 8],
+    [2, 0, 4, 4],
+    [0, 2, 2, 4],
+    [1, 0, 2, 2],
+    [0, 1, 1, 2],
+  ] as const;
+  const sizes: number[] = [];
+  for (const [startX, startY, stepX, stepY] of passes) {
+    const passWidth = width <= startX ? 0 : Math.ceil((width - startX) / stepX);
+    const passHeight = height <= startY ? 0 : Math.ceil((height - startY) / stepY);
+    const bytes = Math.ceil((passWidth * bitsPerPixel) / 8);
+    for (let row = 0; row < passHeight && passWidth > 0; row += 1) sizes.push(bytes);
+  }
+  return sizes;
+}
+
+function decodePng(contents: Buffer): { width: number; height: number } {
+  if (contents.length < 8 || !contents.subarray(0, 8).equals(PNG_SIGNATURE)) {
     throw new Error('not a PNG file');
   }
-  if (contents.subarray(12, 16).toString('ascii') !== 'IHDR') {
-    throw new Error('PNG is missing its IHDR header');
+
+  let offset = PNG_SIGNATURE.length;
+  let width = 0;
+  let height = 0;
+  let bitsPerPixel = 0;
+  let interlaced = false;
+  let sawHeader = false;
+  let sawEnd = false;
+  const compressed: Buffer[] = [];
+
+  while (offset < contents.length) {
+    if (contents.length - offset < 12) throw new Error('PNG has a truncated chunk');
+    const length = contents.readUInt32BE(offset);
+    const dataStart = offset + 8;
+    const dataEnd = dataStart + length;
+    const chunkEnd = dataEnd + 4;
+    if (dataEnd < dataStart || chunkEnd > contents.length) {
+      throw new Error('PNG chunk exceeds file bounds');
+    }
+    const typeBytes = contents.subarray(offset + 4, offset + 8);
+    const type = typeBytes.toString('ascii');
+    if (!/^[A-Za-z]{4}$/.test(type)) throw new Error('PNG has an invalid chunk type');
+    const storedCrc = contents.readUInt32BE(dataEnd);
+    const calculatedCrc = crc32(contents.subarray(offset + 4, dataEnd));
+    if (storedCrc !== calculatedCrc) throw new Error(`PNG ${type} chunk has an invalid CRC`);
+
+    const data = contents.subarray(dataStart, dataEnd);
+    if (!sawHeader && type !== 'IHDR') throw new Error('PNG is missing its IHDR header');
+    if (type === 'IHDR') {
+      if (sawHeader || offset !== PNG_SIGNATURE.length || length !== 13) {
+        throw new Error('PNG has an invalid IHDR header');
+      }
+      sawHeader = true;
+      width = data.readUInt32BE(0);
+      height = data.readUInt32BE(4);
+      const bitDepth = data[8]!;
+      const colorType = data[9]!;
+      const samplesByColorType = new Map([
+        [0, 1],
+        [2, 3],
+        [3, 1],
+        [4, 2],
+        [6, 4],
+      ]);
+      const allowedDepths = new Map<number, number[]>([
+        [0, [1, 2, 4, 8, 16]],
+        [2, [8, 16]],
+        [3, [1, 2, 4, 8]],
+        [4, [8, 16]],
+        [6, [8, 16]],
+      ]);
+      if (
+        width === 0 ||
+        height === 0 ||
+        !allowedDepths.get(colorType)?.includes(bitDepth) ||
+        data[10] !== 0 ||
+        data[11] !== 0 ||
+        (data[12] !== 0 && data[12] !== 1)
+      ) {
+        throw new Error('PNG has unsupported or invalid image parameters');
+      }
+      bitsPerPixel = bitDepth * samplesByColorType.get(colorType)!;
+      interlaced = data[12] === 1;
+    } else if (type === 'IDAT') {
+      compressed.push(data);
+    } else if (type === 'IEND') {
+      if (length !== 0) throw new Error('PNG has an invalid IEND chunk');
+      sawEnd = true;
+      offset = chunkEnd;
+      if (offset !== contents.length) throw new Error('PNG has trailing data after IEND');
+      break;
+    }
+    offset = chunkEnd;
   }
+
+  if (!sawHeader || compressed.length === 0 || !sawEnd) {
+    throw new Error('PNG is missing required image chunks');
+  }
+  const rowSizes = scanlineSizes(width, height, bitsPerPixel, interlaced);
+  const decodedSize = rowSizes.reduce((total, size) => total + size + 1, 0);
+  if (!Number.isSafeInteger(decodedSize) || decodedSize > MAXIMUM_DECODED_SIZE) {
+    throw new Error('PNG decoded image is too large');
+  }
+
+  let decoded: Buffer;
+  try {
+    decoded = inflateSync(Buffer.concat(compressed), { maxOutputLength: decodedSize + 1 });
+  } catch (error) {
+    throw new Error('PNG image data could not be decoded', { cause: error });
+  }
+  if (decoded.length !== decodedSize) throw new Error('PNG decoded image data has the wrong size');
+  let decodedOffset = 0;
+  for (const rowSize of rowSizes) {
+    const filter = decoded[decodedOffset];
+    if (filter === undefined || filter > 4) throw new Error('PNG has an invalid scanline filter');
+    decodedOffset += rowSize + 1;
+  }
+  return { width, height };
+}
+
+export async function inspectPng(filePath: string): Promise<PngDetails> {
+  const [contents, metadata] = await Promise.all([readFile(filePath), stat(filePath)]);
+  const decoded = decodePng(contents);
   return {
-    width: contents.readUInt32BE(16),
-    height: contents.readUInt32BE(20),
+    width: decoded.width,
+    height: decoded.height,
     size: metadata.size,
   };
 }
@@ -70,6 +210,56 @@ export async function validateScreenshotAssets(rootDirectory = process.cwd()): P
   return issues;
 }
 
+export async function stageAndPromoteScreenshotAssets(
+  rootDirectory: string,
+  capture: (stagedRoot: string) => Promise<void>,
+): Promise<void> {
+  const docsDirectory = resolve(rootDirectory, 'docs');
+  await mkdir(docsDirectory, { recursive: true });
+  const transactionDirectory = await mkdtemp(join(docsDirectory, '.tracemark-screenshots-'));
+  const stagedRoot = join(transactionDirectory, 'staged');
+  const stagedImages = join(stagedRoot, 'docs', 'images');
+  const canonicalImages = resolve(rootDirectory, 'docs', 'images');
+  const previousImages = join(transactionDirectory, 'previous-images');
+  let backedUp = false;
+
+  try {
+    await mkdir(stagedImages, { recursive: true });
+    await capture(stagedRoot);
+    const issues = await validateScreenshotAssets(stagedRoot);
+    if (issues.length > 0) {
+      throw new Error(`Staged screenshot validation failed:\n- ${issues.join('\n- ')}`);
+    }
+
+    try {
+      await rename(canonicalImages, previousImages);
+      backedUp = true;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+    }
+
+    try {
+      await rename(stagedImages, canonicalImages);
+    } catch (promotionError) {
+      if (backedUp) {
+        try {
+          await rename(previousImages, canonicalImages);
+          backedUp = false;
+        } catch (rollbackError) {
+          throw new AggregateError(
+            [promotionError, rollbackError],
+            'Screenshot promotion and rollback both failed',
+            { cause: rollbackError },
+          );
+        }
+      }
+      throw promotionError;
+    }
+  } finally {
+    await rm(transactionDirectory, { recursive: true, force: true });
+  }
+}
+
 async function checkAssets(): Promise<void> {
   const issues = await validateScreenshotAssets();
   if (issues.length > 0) {
@@ -92,12 +282,13 @@ async function settleForCapture(page: Page, resetScroll: boolean): Promise<void>
 
 async function capturePage(
   page: Page,
+  outputRoot: string,
   assetPath: string,
   options: { resetScroll?: boolean } = {},
 ): Promise<void> {
   await settleForCapture(page, options.resetScroll ?? true);
   await page.screenshot({
-    path: resolve(assetPath),
+    path: resolve(outputRoot, assetPath),
     animations: 'disabled',
     caret: 'hide',
     fullPage: false,
@@ -112,9 +303,13 @@ async function openPreview(page: Page, previewUrl: string): Promise<void> {
   await page.getByRole('heading', { name: 'The useful part, with the source attached.' }).waitFor();
 }
 
-async function captureInterfaceScreenshots(page: Page, previewUrl: string): Promise<void> {
+async function captureInterfaceScreenshots(
+  page: Page,
+  previewUrl: string,
+  outputRoot: string,
+): Promise<void> {
   await openPreview(page, previewUrl);
-  await capturePage(page, SCREENSHOT_ASSETS[0].path);
+  await capturePage(page, outputRoot, SCREENSHOT_ASSETS[0].path);
 
   await page.getByRole('searchbox', { name: 'Search research' }).fill('provenance');
   await page.getByRole('button', { name: 'Search', exact: true }).click();
@@ -124,7 +319,7 @@ async function captureInterfaceScreenshots(page: Page, previewUrl: string): Prom
     throw new Error('Search preview must render exactly one meaningful filtered result.');
   }
   await page.getByRole('heading', { name: 'Notes on Evidence and Provenance' }).waitFor();
-  await capturePage(page, SCREENSHOT_ASSETS[1].path);
+  await capturePage(page, outputRoot, SCREENSHOT_ASSETS[1].path);
 
   await openPreview(page, previewUrl);
   await page.getByRole('button', { name: 'Enable local AI', exact: true }).click();
@@ -142,7 +337,7 @@ async function captureInterfaceScreenshots(page: Page, previewUrl: string): Prom
     panel.scrollIntoView({ block: 'start' });
     window.scrollBy(0, -14);
   });
-  await capturePage(page, SCREENSHOT_ASSETS[2].path, { resetScroll: false });
+  await capturePage(page, outputRoot, SCREENSHOT_ASSETS[2].path, { resetScroll: false });
 }
 
 function promoMarkup(iconDataUrl: string): string {
@@ -237,53 +432,54 @@ function promoMarkup(iconDataUrl: string): string {
 </html>`;
 }
 
-async function capturePromo(browser: Browser): Promise<void> {
+async function capturePromo(browser: Browser, outputRoot: string): Promise<void> {
   const icon = await readFile(resolve('public/icon/128.png'));
   const page = await browser.newPage({ viewport: PROMO_VIEWPORT, deviceScaleFactor: 1 });
   try {
     await page.setContent(promoMarkup(`data:image/png;base64,${icon.toString('base64')}`), {
       waitUntil: 'load',
     });
-    await capturePage(page, SCREENSHOT_ASSETS[3].path);
+    await capturePage(page, outputRoot, SCREENSHOT_ASSETS[3].path);
   } finally {
     await page.close();
   }
 }
 
 async function generateAssets(): Promise<void> {
-  await mkdir(resolve('docs/images'), { recursive: true });
-  let server: ViteDevServer | undefined;
-  let browser: Browser | undefined;
-  try {
-    server = await createServer({
-      configFile: resolve('tests/visual/vite.config.ts'),
-      logLevel: 'error',
-      server: { host: '127.0.0.1', port: 0, strictPort: false },
-    });
-    await server.listen();
-    const address = server.httpServer?.address() as AddressInfo | null;
-    if (!address) throw new Error('The deterministic preview server did not start.');
-    const previewUrl = `http://127.0.0.1:${address.port}/sidepanel-preview.html`;
-
-    browser = await chromium.launch({ headless: true });
-    const page = await browser.newPage({
-      viewport: STORE_SCREENSHOT_VIEWPORT,
-      deviceScaleFactor: 1,
-      locale: 'en-US',
-      timezoneId: 'UTC',
-      colorScheme: 'light',
-      reducedMotion: 'reduce',
-    });
+  await stageAndPromoteScreenshotAssets(process.cwd(), async (stagedRoot) => {
+    let server: ViteDevServer | undefined;
+    let browser: Browser | undefined;
     try {
-      await captureInterfaceScreenshots(page, previewUrl);
+      server = await createServer({
+        configFile: resolve('tests/visual/vite.config.ts'),
+        logLevel: 'error',
+        server: { host: '127.0.0.1', port: 0, strictPort: false },
+      });
+      await server.listen();
+      const address = server.httpServer?.address() as AddressInfo | null;
+      if (!address) throw new Error('The deterministic preview server did not start.');
+      const previewUrl = `http://127.0.0.1:${address.port}/sidepanel-preview.html`;
+
+      browser = await chromium.launch({ headless: true });
+      const page = await browser.newPage({
+        viewport: STORE_SCREENSHOT_VIEWPORT,
+        deviceScaleFactor: 1,
+        locale: 'en-US',
+        timezoneId: 'UTC',
+        colorScheme: 'light',
+        reducedMotion: 'reduce',
+      });
+      try {
+        await captureInterfaceScreenshots(page, previewUrl, stagedRoot);
+      } finally {
+        await page.close();
+      }
+      await capturePromo(browser, stagedRoot);
     } finally {
-      await page.close();
+      await browser?.close();
+      await server?.close();
     }
-    await capturePromo(browser);
-  } finally {
-    await browser?.close();
-    await server?.close();
-  }
+  });
 
   await checkAssets();
   console.log('Generated deterministic TraceMark store screenshots and promo asset.');

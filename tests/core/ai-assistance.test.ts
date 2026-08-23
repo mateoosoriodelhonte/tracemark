@@ -48,7 +48,7 @@ function createService(
   provider: AIProvider,
   settings: Settings,
   permissionGranted: boolean,
-  permissionChecker = { contains: async () => permissionGranted },
+  permissionChecker = { has: async () => permissionGranted },
   createId = () => resultId,
 ): AIAssistanceService {
   return new AIAssistanceService(
@@ -67,7 +67,7 @@ describe('AIAssistanceService privacy gates', () => {
   test('rejects disabled local AI before checking permission or invoking a provider', async () => {
     const repository = await createRepository();
     const provider = createProvider();
-    const permissionChecker = { contains: vi.fn().mockResolvedValue(false) };
+    const permissionChecker = { has: vi.fn().mockResolvedValue(false) };
     const service = createService(repository, provider, disabledSettings, false, permissionChecker);
 
     await expect(service.run('summary', [makeHighlight().id])).rejects.toMatchObject({
@@ -78,13 +78,13 @@ describe('AIAssistanceService privacy gates', () => {
     expect(provider.explain).not.toHaveBeenCalled();
     expect(provider.suggestTags).not.toHaveBeenCalled();
     expect(provider.overview).not.toHaveBeenCalled();
-    expect(permissionChecker.contains).not.toHaveBeenCalled();
+    expect(permissionChecker.has).not.toHaveBeenCalled();
   });
 
   test('rejects absent loopback permission before invoking a provider', async () => {
     const repository = await createRepository();
     const provider = createProvider();
-    const permissionChecker = { contains: vi.fn().mockResolvedValue(false) };
+    const permissionChecker = { has: vi.fn().mockResolvedValue(false) };
     const service = createService(repository, provider, enabledSettings, false, permissionChecker);
 
     await expect(service.run('summary', [makeHighlight().id])).rejects.toMatchObject({
@@ -95,9 +95,7 @@ describe('AIAssistanceService privacy gates', () => {
     expect(provider.explain).not.toHaveBeenCalled();
     expect(provider.suggestTags).not.toHaveBeenCalled();
     expect(provider.overview).not.toHaveBeenCalled();
-    expect(permissionChecker.contains).toHaveBeenCalledWith({
-      origins: ['http://127.0.0.1:11434/*'],
-    });
+    expect(permissionChecker.has).toHaveBeenCalledOnce();
   });
 
   test('rejects an unavailable selected highlight before invoking a provider', async () => {

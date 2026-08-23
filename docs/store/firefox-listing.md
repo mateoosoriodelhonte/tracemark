@@ -39,7 +39,7 @@ Use the Firefox sidebar as a local research library:
 
 Research is stored in the current Firefox profile. TraceMark has no account, telemetry, advertising, cloud sync, or application backend. Keep your own downloaded backups because clearing extension data, removing a browser profile, or uninstalling the extension can make local research unavailable.
 
-Local AI is optional and disabled by default. If you separately install and run Ollama, you can explicitly enable access to 127.0.0.1:11434 and request a summary, explanation, tag suggestions, or an overview for selected saved quotations. Ollama is not required for TraceMark's capture, library, search, marking, or export features. TraceMark does not download or start Ollama and does not send research to a TraceMark-operated cloud service.
+Local AI is optional and disabled by default. If you separately install and run Ollama, you can explicitly enable it. Firefox asks separately for optional website-content data consent and access to 127.0.0.1:11434; TraceMark requires both grants before it sends selected saved quotations for a requested summary, explanation, tag suggestion, or overview. Ollama is not required for TraceMark's capture, library, search, marking, or export features. TraceMark does not download or start Ollama and does not send research to a TraceMark-operated cloud service.
 
 Capture and marking work after a user action on a normal webpage. Browser-internal pages, store pages, browser-owned PDF viewers, changed quotations, and ambiguous repeated text may not be supported. TraceMark refuses to guess when it cannot identify one exact match.
 ```
@@ -75,7 +75,7 @@ Functional check:
 
 The add-on has no static content script or standing website host permission. Capture and Mark on page require a browser-recognized user gesture and an active normal webpage. Browser-internal pages, AMO pages, and browser-owned PDF viewers can reject script injection.
 
-Optional Local AI review: only if Ollama is already installed and running locally, choose “Enable local AI,” approve the optional http://127.0.0.1:11434/* origin, select saved research, and request an action. TraceMark does not install or start Ollama and does not require AI or a cloud service for its core workflow.
+Optional Local AI review: only if Ollama is already installed and running locally, choose “Enable local AI.” Firefox presents two separate prompts: approve optional website-content data consent and then the optional http://127.0.0.1:11434/* origin. TraceMark requires both grants, rechecks them before every request, and fails closed if either is missing or revoked. Select saved research and request an action. Choosing “Disable local AI” removes both grants separately. TraceMark does not install or start Ollama and does not require AI or a cloud service for its core workflow.
 ```
 
 ## Signing status and official references

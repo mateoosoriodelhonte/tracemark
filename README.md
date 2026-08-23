@@ -106,7 +106,9 @@ Ollama origin silently.
 2. Make sure Ollama is running locally. `ollama serve` starts its server when another Ollama process
    is not already serving it.
 3. In TraceMark's **Local AI** section, confirm the model name and choose **Enable local AI**.
-4. Approve access to `http://127.0.0.1:11434/*` when the browser asks.
+4. Approve access to `http://127.0.0.1:11434/*` when the browser asks. Firefox asks separately for
+   optional website-content data consent; both grants are required before TraceMark sends selected
+   research to Ollama.
 5. Select one or more saved quotations, then choose **Summarize**, **Explain**, **Suggest tags**, or
    **Overview**.
 
@@ -117,7 +119,9 @@ are separate components whose trustworthiness you must assess. See the
 [Ollama API introduction](https://docs.ollama.com/api/introduction).
 
 Disabling local AI first saves the disabled preference and then asks the browser to remove the
-optional Ollama origin permission.
+optional Ollama origin permission and, on Firefox, the optional website-content data consent.
+TraceMark rechecks both applicable grants before every request and fails closed if either was
+revoked in browser settings.
 
 ## Browser limitations
 

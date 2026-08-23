@@ -67,9 +67,11 @@ protect them after download.
 ### Optional Ollama assistance
 
 Local AI starts disabled. Enabling it asks the browser for the optional
-`http://127.0.0.1:11434/*` origin and saves an Ollama model preference. For each user-requested
-action, the assistance service verifies that AI is enabled, the permission still exists, and one to
-twenty distinct stored highlight IDs are valid. It loads only those records and posts their
+`http://127.0.0.1:11434/*` origin; Firefox separately asks for optional `websiteContent` built-in
+data consent. Firefox requires both grants, while Chromium requires the origin. TraceMark saves an
+Ollama model preference only after permission succeeds. For each user-requested action, the UI and
+assistance service verify that AI is enabled and all applicable grants still exist before loading
+one to twenty distinct stored highlight IDs. It loads only those records and posts their
 internal highlight ID, quotation, title, URL, tags, and note to `/api/chat` with credentials
 omitted, redirects rejected, a 30-second timeout, and a one-megabyte response limit. Provider output
 must match a strict schema before it can be stored.

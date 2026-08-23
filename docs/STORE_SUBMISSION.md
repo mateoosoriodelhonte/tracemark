@@ -96,6 +96,8 @@ Official Chrome guidance:
       additional hardware is required. Ollama is an optional enhancement only.
 - [ ] Confirm the manifest disclosure is required `none`, optional `websiteContent`, consistent
       with [Store privacy and permission answers](store/privacy-answers.md).
+- [ ] Confirm the Local AI reviewer instructions describe Firefox's separate website-content and
+      loopback-origin prompts, both-grants fail-closed check, and separate removal on disable.
 - [ ] Manually submit the version. Record the submission state and respond to reviewer questions.
 - [ ] After Mozilla signs the version, download and retain the signed artifact; do not relabel the
       locally generated unsigned ZIP as signed.
@@ -107,6 +109,7 @@ Official Mozilla guidance:
 - [Submitting an add-on](https://extensionworkshop.com/documentation/publish/submitting-an-add-on/)
 - [Signing and distribution overview](https://extensionworkshop.com/documentation/publish/signing-and-distribution-overview/)
 - [Source-code submission](https://extensionworkshop.com/documentation/publish/source-code-submission/)
+- [Firefox built-in data consent](https://extensionworkshop.com/documentation/develop/firefox-builtin-data-consent/)
 
 ## Stop conditions
 
