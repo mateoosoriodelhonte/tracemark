@@ -227,12 +227,14 @@
 
   async function deleteHighlight(): Promise<void> {
     if (!editing) return;
+    const deletedHighlightId = editing.id;
     try {
       await dataFor(
-        { type: 'highlights.delete', highlightId: editing.id, confirmed: true },
+        { type: 'highlights.delete', highlightId: deletedHighlightId, confirmed: true },
         DeleteResultSchema,
       );
-      highlights = highlights.filter(({ id }) => id !== editing?.id);
+      highlights = highlights.filter(({ id }) => id !== deletedHighlightId);
+      selectedHighlightIds = selectedHighlightIds.filter((id) => id !== deletedHighlightId);
       status = 'Deleted saved quotation.';
       closeDialog();
     } catch (deleteError) {
@@ -407,10 +409,15 @@
   }
 
   async function runLocalAI(kind: AIResultKind): Promise<void> {
-    if (aiProvider !== 'ollama' || selectedHighlightIds.length === 0 || aiTaskBusy) return;
+    if (aiProvider !== 'ollama' || aiTaskBusy) return;
+    const visibleHighlightIds = new Set(highlights.map(({ id }) => id));
+    const sourceHighlightIds = selectedHighlightIds.filter((id) => visibleHighlightIds.has(id));
+    if (sourceHighlightIds.length !== selectedHighlightIds.length) {
+      selectedHighlightIds = sourceHighlightIds;
+    }
+    if (sourceHighlightIds.length === 0) return;
     aiTaskBusy = true;
     aiError = '';
-    const sourceHighlightIds = [...selectedHighlightIds];
     try {
       aiResult = await dataFor({ type: 'ai.run', kind, sourceHighlightIds }, AIResultSchema);
       status = `Generated local AI output from ${sourceHighlightIds.length.toLocaleString()} selected quotation${sourceHighlightIds.length === 1 ? '' : 's'}.`;

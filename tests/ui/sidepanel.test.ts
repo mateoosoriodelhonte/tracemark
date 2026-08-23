@@ -246,6 +246,57 @@ describe('research library side panel', () => {
     expect(screen.getByRole('button', { name: 'Summarize' })).toBeDisabled();
   });
 
+  test('removes a deleted quotation from selection before the next local AI request', async () => {
+    const generated: AIResult = {
+      id: '5d84d7d8-b47e-47b2-a44f-a25491ac9234',
+      schemaVersion: 1,
+      kind: 'summary',
+      provider: 'ollama',
+      sourceHighlightIds: [secondHighlight.id],
+      content: 'A summary of the remaining visible quotation.',
+      createdAt: '2026-08-22T18:00:00.000Z',
+    };
+    const request = libraryRequest(
+      { ...settings, ai: { provider: 'ollama', model: 'llama3.2' } },
+      [hostileHighlight, secondHighlight],
+      generated,
+    );
+    render(App, { props: { request } });
+    await screen.findByText(secondHighlight.quote);
+
+    await fireEvent.click(
+      screen.getByRole('checkbox', { name: `Select ${hostileHighlight.title}` }),
+    );
+    await fireEvent.click(
+      screen.getByRole('checkbox', { name: `Select ${secondHighlight.title}` }),
+    );
+    await fireEvent.click(screen.getByRole('button', { name: `Edit ${hostileHighlight.title}` }));
+    const dialog = screen.getByRole('dialog', { name: 'Edit saved quotation' });
+    await fireEvent.click(within(dialog).getByRole('button', { name: 'Delete quotation' }));
+    await fireEvent.click(within(dialog).getByRole('button', { name: 'Confirm deletion' }));
+
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog', { name: 'Edit saved quotation' })).toBeNull(),
+    );
+    expect(screen.queryByRole('checkbox', { name: `Select ${hostileHighlight.title}` })).toBeNull();
+    expect(screen.getByRole('checkbox', { name: `Select ${secondHighlight.title}` })).toBeChecked();
+    expect(screen.getByText('1 selected')).toBeInTheDocument();
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Summarize' }));
+    await waitFor(() =>
+      expect(request).toHaveBeenCalledWith({
+        type: 'ai.run',
+        kind: 'summary',
+        sourceHighlightIds: [secondHighlight.id],
+      }),
+    );
+    expect(request).not.toHaveBeenCalledWith({
+      type: 'ai.run',
+      kind: 'summary',
+      sourceHighlightIds: [hostileHighlight.id, secondHighlight.id],
+    });
+  });
+
   test('persists an edited enabled model without running AI', async () => {
     const request = libraryRequest({
       ...settings,
