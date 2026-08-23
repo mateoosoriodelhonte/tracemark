@@ -41,6 +41,7 @@ export function createLocalAIPermissionManager(
   firefox: boolean,
 ): LocalAIPermissionManager {
   let acquiredByLastRequest: PermissionSet[] = [];
+  let cleanupInspectionRequired = false;
 
   async function removeSets(permissionSets: PermissionSet[]): Promise<boolean> {
     let removed = true;
@@ -69,7 +70,9 @@ export function createLocalAIPermissionManager(
 
   return {
     async request() {
-      if (acquiredByLastRequest.length > 0) return 'cleanup-required';
+      if (acquiredByLastRequest.length > 0 || cleanupInspectionRequired) {
+        return 'cleanup-required';
+      }
       if (!firefox) {
         try {
           if (await permissions.contains(originPermission)) return 'granted';
@@ -134,23 +137,26 @@ export function createLocalAIPermissionManager(
     },
 
     async hasAny() {
-      let hasOrigin: boolean;
       try {
-        hasOrigin = await permissions.contains(originPermission);
-      } catch {
-        return false;
-      }
-      if (!firefox) return hasOrigin;
-      if (typeof permissions.getAll !== 'function') return hasOrigin;
-      try {
+        const hasOrigin = await permissions.contains(originPermission);
+        if (!firefox) {
+          cleanupInspectionRequired = hasOrigin;
+          return hasOrigin;
+        }
+        if (typeof permissions.getAll !== 'function') {
+          throw new Error('Firefox data-consent permission inspection is unavailable.');
+        }
         const granted = await permissions.getAll();
-        return (
-          hasOrigin ||
-          (supportsDataCollection(granted) &&
-            granted.data_collection.includes(FIREFOX_WEBSITE_CONTENT_PERMISSION))
-        );
-      } catch {
-        return hasOrigin;
+        if (!supportsDataCollection(granted)) {
+          throw new Error('Firefox data-consent permission inspection is unavailable.');
+        }
+        const hasAnyGrant =
+          hasOrigin || granted.data_collection.includes(FIREFOX_WEBSITE_CONTENT_PERMISSION);
+        cleanupInspectionRequired = hasAnyGrant;
+        return hasAnyGrant;
+      } catch (error) {
+        cleanupInspectionRequired = true;
+        throw error;
       }
     },
 
@@ -183,7 +189,10 @@ export function createLocalAIPermissionManager(
 
       if (!originInspected || (firefox && dataCollection === undefined)) return false;
       const removed = await removeSets(permissionSets);
-      if (removed) acquiredByLastRequest = [];
+      if (removed) {
+        acquiredByLastRequest = [];
+        cleanupInspectionRequired = false;
+      }
       return removed;
     },
   };

@@ -43,10 +43,10 @@ function pngChunk(type: string, data = Buffer.alloc(0)): Buffer {
   return chunk;
 }
 
-function imageHeader(colorType = 2): Buffer {
+function imageHeader(colorType = 2, width = 1, height = 1): Buffer {
   const data = Buffer.alloc(13);
-  data.writeUInt32BE(1, 0);
-  data.writeUInt32BE(1, 4);
+  data.writeUInt32BE(width, 0);
+  data.writeUInt32BE(height, 4);
   data[8] = 8;
   data[9] = colorType;
   return pngChunk('IHDR', data);
@@ -143,6 +143,22 @@ describe('screenshot asset validation', () => {
     await writeFile(path, contents);
 
     await expect(inspectPng(path)).rejects.toThrow();
+  });
+
+  test('rejects arbitrary bytes appended after the zlib stream inside IDAT', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'tracemark-png-idat-padding-'));
+    temporaryDirectories.push(root);
+    const path = join(root, 'invalid.png');
+    const width = 1280;
+    const height = 800;
+    const decoded = Buffer.alloc(height * (width * 3 + 1));
+    const paddedImageData = Buffer.concat([deflateSync(decoded), Buffer.alloc(12_000, 0xa5)]);
+    await writeFile(
+      path,
+      pngWith(imageHeader(2, width, height), pngChunk('IDAT', paddedImageData), imageEnd),
+    );
+
+    await expect(inspectPng(path)).rejects.toThrow(/compressed image data/i);
   });
 
   test('reports missing, undersized, and dimensionally invalid assets', async () => {

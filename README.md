@@ -123,8 +123,9 @@ optional Ollama origin permission and, on Firefox, the optional website-content 
 TraceMark rechecks both applicable grants before every request and fails closed if either was
 revoked in browser settings. If permission cleanup fails, or a disabled library reloads with a
 residual Local AI grant, TraceMark shows **Retry permission removal** and blocks re-enabling until
-the user explicitly completes cleanup; it does not remove a residual grant merely because the
-library loaded.
+the user explicitly completes cleanup. If the browser permissions cannot be inspected, TraceMark
+uses that same blocked retry state instead of assuming the grants are absent. It does not remove a
+residual grant merely because the library loaded.
 
 ## Browser limitations
 

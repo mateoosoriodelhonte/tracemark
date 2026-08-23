@@ -101,6 +101,55 @@ describe('local AI browser permissions', () => {
     expect(api.remove).not.toHaveBeenCalled();
   });
 
+  test('Chromium reports unknown when origin permission inspection fails', async () => {
+    const api = permissionApi();
+    api.contains.mockRejectedValue(new Error('permission API failed'));
+    const manager = createLocalAIPermissionManager(api, false);
+
+    await expect(manager.hasAny()).rejects.toThrow('permission API failed');
+  });
+
+  test('Firefox reports unknown when origin permission inspection fails', async () => {
+    const api = permissionApi({ origins: [], permissions: [], data_collection: [] });
+    api.contains.mockRejectedValue(new Error('origin inspection failed'));
+    const manager = createLocalAIPermissionManager(api, true);
+
+    await expect(manager.hasAny()).rejects.toThrow('origin inspection failed');
+    expect(api.getAll).not.toHaveBeenCalled();
+  });
+
+  test('Firefox reports unknown when data-consent inspection fails', async () => {
+    const api = permissionApi({ origins: [], permissions: [], data_collection: [] });
+    api.getAll.mockRejectedValue(new Error('data consent inspection failed'));
+    const manager = createLocalAIPermissionManager(api, true);
+
+    await expect(manager.hasAny()).rejects.toThrow('data consent inspection failed');
+  });
+
+  test('Firefox reports unknown data-consent inspection even when the origin is known granted', async () => {
+    const api = permissionApi({
+      origins: [ollamaOrigin],
+      permissions: [],
+      data_collection: ['websiteContent'],
+    });
+    api.getAll.mockRejectedValue(new Error('data consent inspection failed'));
+    const manager = createLocalAIPermissionManager(api, true);
+
+    await expect(manager.hasAny()).rejects.toThrow('data consent inspection failed');
+  });
+
+  test('a failed reconciliation blocks a later request from accepting a residual grant', async () => {
+    const api = permissionApi();
+    api.contains.mockRejectedValueOnce(new Error('permission API failed')).mockResolvedValue(true);
+    const manager = createLocalAIPermissionManager(api, false);
+
+    await expect(manager.hasAny()).rejects.toThrow('permission API failed');
+    await expect(manager.request()).resolves.toBe('cleanup-required');
+
+    expect(api.contains).toHaveBeenCalledOnce();
+    expect(api.request).not.toHaveBeenCalled();
+  });
+
   test('Firefox preserves pre-existing website consent when origin access is denied', async () => {
     const api = permissionApi({
       origins: [],

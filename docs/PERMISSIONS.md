@@ -60,7 +60,9 @@ origin and website-content consent. Chromium requests and checks only the option
 Failed removal remains recoverable: the disabled library blocks **Enable local AI** and exposes
 **Retry permission removal** until cleanup succeeds. On reload, TraceMark reconciles the disabled
 preference with applicable browser grants and surfaces the same explicit cleanup control without
-automatically removing a grant.
+automatically removing a grant. If either applicable browser-permission inspection is unavailable
+or fails, TraceMark treats the result as unknown, blocks **Enable local AI**, and requires an
+explicit cleanup retry to establish and remove any residual grant before enabling can resume.
 
 ## Permissions TraceMark does not request
 

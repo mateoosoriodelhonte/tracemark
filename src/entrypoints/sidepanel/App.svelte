@@ -511,7 +511,10 @@
           'Local AI is disabled, but browser permission remains. Remove it before enabling again.';
       }
     } catch {
-      // A later explicit enable or cleanup action will check the browser again.
+      permissionRemovalPending = true;
+      permissionRemovalMode = 'remove';
+      aiError =
+        'Local AI permissions could not be inspected. Retry permission removal before enabling.';
     }
   }
 

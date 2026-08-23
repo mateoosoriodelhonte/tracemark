@@ -60,8 +60,9 @@ optional origin permission plus Firefox's optional website-content data consent.
 the applicable grants again before every Ollama request and sends nothing if a grant is missing,
 unsupported, or revoked. Browser settings remain the authoritative place to inspect or revoke
 extension permissions. If removal fails or TraceMark reloads while disabled with a residual Local
-AI grant, the library exposes an explicit retry and prevents re-enabling until cleanup succeeds; it
-does not automatically remove the grant on load.
+AI grant, the library exposes an explicit retry and prevents re-enabling until cleanup succeeds. A
+failed or unsupported browser-permission inspection enters the same blocked retry state instead of
+being treated as confirmed absence. TraceMark does not automatically remove a grant on load.
 
 ## Data sharing and sale
 

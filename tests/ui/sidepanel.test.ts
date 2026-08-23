@@ -2,7 +2,7 @@
 
 import { readFileSync } from 'node:fs';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/svelte';
-import { afterEach, describe, expect, test, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import App from '../../src/entrypoints/sidepanel/App.svelte';
 import type { AIResult, Highlight, Settings } from '../../src/domain/models';
 import type { MessageRequest, MessageResponse } from '../../src/messaging/protocol';
@@ -106,7 +106,20 @@ function libraryRequest(
   });
 }
 
-afterEach(cleanup);
+beforeEach(() => {
+  vi.stubGlobal('browser', {
+    permissions: {
+      contains: vi.fn().mockResolvedValue(false),
+      request: vi.fn().mockResolvedValue(true),
+      remove: vi.fn().mockResolvedValue(true),
+    },
+  });
+});
+
+afterEach(() => {
+  cleanup();
+  vi.unstubAllGlobals();
+});
 
 describe('research library side panel', () => {
   test('keeps Firefox local AI disabled when built-in data consent is unsupported', async () => {
@@ -288,6 +301,28 @@ describe('research library side panel', () => {
 
     const retry = await screen.findByRole('button', { name: 'Retry permission removal' });
     const enable = screen.getByRole('button', { name: 'Enable local AI' });
+    expect(enable).toBeDisabled();
+    expect(removeLocalAIPermissions).not.toHaveBeenCalled();
+
+    await fireEvent.click(retry);
+
+    await waitFor(() => expect(removeLocalAIPermissions).toHaveBeenCalledOnce());
+    await waitFor(() => expect(enable).toBeEnabled());
+  });
+
+  test('reload blocks enabling until failed permission inspection is explicitly retried', async () => {
+    const request = libraryRequest();
+    const hasAnyLocalAIPermissions = vi
+      .fn()
+      .mockRejectedValue(new Error('Browser permission inspection failed.'));
+    const removeLocalAIPermissions = vi.fn().mockResolvedValue(true);
+    render(App, {
+      props: { request, hasAnyLocalAIPermissions, removeLocalAIPermissions },
+    });
+
+    const retry = await screen.findByRole('button', { name: 'Retry permission removal' });
+    const enable = screen.getByRole('button', { name: 'Enable local AI' });
+    expect(screen.getByRole('alert')).toHaveTextContent(/permission.*could not be inspected/i);
     expect(enable).toBeDisabled();
     expect(removeLocalAIPermissions).not.toHaveBeenCalled();
 

@@ -26,6 +26,11 @@ interface PngDetails {
   imageDataSize: number;
 }
 
+interface InflateDetails {
+  buffer: Buffer;
+  engine: { bytesWritten: number; close(): void };
+}
+
 export interface ScreenshotFileOperations {
   rename(from: string, to: string): Promise<void>;
   remove(path: string, options: { recursive: true; force: true }): Promise<void>;
@@ -70,7 +75,6 @@ function decodePng(contents: Buffer): { width: number; height: number; imageData
   let height = 0;
   let sawHeader = false;
   let sawEnd = false;
-  let imageDataSize = 0;
   const compressed: Buffer[] = [];
 
   while (offset < contents.length) {
@@ -112,7 +116,6 @@ function decodePng(contents: Buffer): { width: number; height: number; imageData
     } else if (type === 'IDAT') {
       if (!sawHeader || sawEnd) throw new Error('PNG has an invalid chunk order');
       compressed.push(data);
-      imageDataSize += data.length;
     } else if (type === 'IEND') {
       if (!sawHeader || compressed.length === 0 || sawEnd || length !== 0) {
         throw new Error('PNG has an invalid IEND chunk order');
@@ -136,11 +139,22 @@ function decodePng(contents: Buffer): { width: number; height: number; imageData
     throw new Error('PNG decoded image is too large');
   }
 
+  const compressedImageData = Buffer.concat(compressed);
   let decoded: Buffer;
+  let imageDataSize: number;
   try {
-    decoded = inflateSync(Buffer.concat(compressed), { maxOutputLength: decodedSize + 1 });
+    const result = inflateSync(compressedImageData, {
+      info: true,
+      maxOutputLength: decodedSize + 1,
+    }) as unknown as InflateDetails;
+    decoded = result.buffer;
+    imageDataSize = result.engine.bytesWritten;
+    result.engine.close();
   } catch (error) {
     throw new Error('PNG image data could not be decoded', { cause: error });
+  }
+  if (imageDataSize !== compressedImageData.length) {
+    throw new Error('PNG compressed image data contains bytes after the zlib stream');
   }
   if (decoded.length !== decodedSize) throw new Error('PNG decoded image data has the wrong size');
   let decodedOffset = 0;
