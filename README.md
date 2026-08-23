@@ -7,8 +7,7 @@ them into a searchable research library, and marking an exact quotation on its o
 Research stays local to the browser profile by default: TraceMark has no account, telemetry,
 cloud sync, or application backend.
 
-> **Interface preview:** [Open the TraceMark research library screenshot](docs/images/tracemark-library.png).
-> The release screenshot is being added separately; this link will resolve when that asset lands.
+![TraceMark research library with local-first controls and synthetic saved research](docs/images/tracemark-library.png)
 
 ## What it does
 
@@ -138,6 +137,8 @@ pnpm dev:firefox         # Firefox development runner
 pnpm build:chrome        # build .output/chrome-mv3
 pnpm build:firefox       # build .output/firefox-mv3
 pnpm package:build       # create Chrome and Firefox release ZIPs
+pnpm screenshots         # regenerate deterministic store screenshots
+pnpm screenshots:check   # validate screenshot filenames, dimensions, and sizes
 pnpm check               # quality gate after release ZIPs exist
 ```
 

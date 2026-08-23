@@ -18,6 +18,8 @@
     "zip:firefox": "wxt zip -b firefox --mv3",
     "package:build": "pnpm zip:chrome && pnpm zip:firefox",
     "package:validate": "node --experimental-strip-types scripts/validate-packages.ts",
+    "screenshots": "node --experimental-strip-types scripts/capture-screenshots.ts",
+    "screenshots:check": "node --experimental-strip-types scripts/capture-screenshots.ts --check",
     "test:e2e:packages": "vitest run tests/e2e/manifest-packages.test.ts",
     "test:e2e:chromium": "pnpm build:chrome && playwright test --config playwright.config.ts",
     "test:e2e:firefox": "pnpm zip:firefox && node --experimental-strip-types tests/e2e/firefox.ts",
