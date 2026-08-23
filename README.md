@@ -22,7 +22,14 @@ cloud sync, or application backend.
 ## Install for local use
 
 TraceMark 1.0.0 has validated Chrome and Firefox packages, but it is not published in either
-browser store.
+browser store. Download the reviewed artifacts from the
+[TraceMark v1.0.0 GitHub release](https://github.com/mateoosoriodelhonte/tracemark/releases/tag/v1.0.0):
+
+- [Chrome package](https://github.com/mateoosoriodelhonte/tracemark/releases/download/v1.0.0/tracemark-1.0.0-chrome.zip)
+- [Firefox package](https://github.com/mateoosoriodelhonte/tracemark/releases/download/v1.0.0/tracemark-1.0.0-firefox.zip)
+- [SHA-256 checksums](https://github.com/mateoosoriodelhonte/tracemark/releases/download/v1.0.0/SHA256SUMS)
+
+Verify the downloaded browser archive against `SHA256SUMS` before installation.
 
 First install [Node.js 22 or newer](https://nodejs.org/) and pnpm 11.19.0, then build both browser
 targets:
@@ -168,10 +175,10 @@ For the full test matrix, packaged-browser evidence, and manual browser-gesture 
 
 ## Project status
 
-TraceMark is at version 1.0.0 release-candidate readiness. Chrome and Firefox archives validate,
-and packaged-browser automation covers startup, import, library, search, edit, inert rendering, and
+TraceMark 1.0.0 is published as a GitHub release. Chrome and Firefox archives validate, and
+packaged-browser automation covers startup, import, library, search, edit, inert rendering, and
 exports. Browser-chrome capture, fresh-tab anchor recovery, native panel/sidebar operation, and
-Firefox permission prompts remain integration-tested plus pending manual release checks. Store
+Firefox permission prompts remain integration-tested plus documented manual checks. Browser-store
 submission and publication have not occurred.
 
 ## License
