@@ -44,9 +44,9 @@ See [docs/PERMISSIONS.md](docs/PERMISSIONS.md) for the complete permission ratio
 
 Local AI is disabled by default. Enabling it requires a separate browser prompt for the only
 optional origin, `http://127.0.0.1:11434/*`. For a requested AI action, TraceMark sends only the
-stored quotation, title, source URL, tags, and note belonging to the saved highlights the user has
-selected. It sends them to the Ollama chat API at `http://127.0.0.1:11434/api/chat` and stores the
-validated result in extension IndexedDB.
+stored internal highlight ID, quotation, title, source URL, tags, and note belonging to the saved
+highlights the user has selected. It sends them to the Ollama chat API at
+`http://127.0.0.1:11434/api/chat` and stores the validated result in extension IndexedDB.
 
 Loopback HTTP traffic is local to the device but is not encrypted. TraceMark does not establish
 the trustworthiness of Ollama, a model, the operating system, browser extensions, or other local

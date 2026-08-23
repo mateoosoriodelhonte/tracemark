@@ -112,9 +112,9 @@ Ollama origin silently.
    **Overview**.
 
 TraceMark sends only the stored fields of the highlights selected for that requested action:
-quotation, title, source URL, tags, and note. Traffic uses plain HTTP on the loopback interface; it
-is not encrypted. Ollama, installed models, and other software on the device are separate
-components whose trustworthiness you must assess. See the
+internal highlight ID, quotation, title, source URL, tags, and note. Traffic uses plain HTTP on the
+loopback interface; it is not encrypted. Ollama, installed models, and other software on the device
+are separate components whose trustworthiness you must assess. See the
 [Ollama API introduction](https://docs.ollama.com/api/introduction).
 
 Disabling local AI first saves the disabled preference and then asks the browser to remove the

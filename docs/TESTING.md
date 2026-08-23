@@ -97,14 +97,15 @@ record the Chrome version, OS, date, tester, and deviations while running this c
    inline quote fragments are marked, and the page text is unchanged.
 8. Clear the library search. On `<printed-origin>/hostile.html`, select exactly
    `<img src=x onerror=alert(1)>`. Right-click the selection and choose
-   **Save selection to TraceMark**. Confirm literal text is displayed, no image is created, and no
-   script dialog opens.
+   **Save selection to TraceMark**. Return to the library and choose **Search** to refresh it.
+   Confirm literal text is displayed, no image is created, and no script dialog opens.
 9. On `<printed-origin>/repeated.html`, select one exact `repeated claim` and press `Alt+Shift+S`.
-   Confirm a new Inbox quotation appears. Choose **Mark on page** while the fixture remains active
-   and confirm TraceMark reports ambiguity rather than guessing.
+   Return to the library and choose **Search** to refresh it, then confirm a new Inbox quotation
+   appears. Keep the repeated fixture tab active, choose **Mark on page**, and confirm TraceMark
+   reports ambiguity rather than guessing.
 10. Open **Backups** and download JSON and Markdown. Confirm JSON contains the captured records and
     edited note/tags; confirm Markdown contains the quotations and note, contains
-    `&lt;img src=x onerror\(1\)&gt;`, and contains no executable literal
+    `&lt;img src=x onerror=alert\(1\)&gt;`, and contains no executable literal
     `<img src=x onerror=alert(1)>` element.
 11. Remove the unpacked extension, close the fixture server, and delete the disposable profile.
 
@@ -194,14 +195,14 @@ evidence:
    page text is unchanged.
 8. Clear the library search. On `<printed-origin>/hostile.html`, select exactly
    `<img src=x onerror=alert(1)>`. Right-click the selection and choose
-   **Save selection to TraceMark**. Confirm the library displays the literal text, creates no image,
-   and opens no script dialog.
+   **Save selection to TraceMark**. Return to the library and choose **Search** to refresh it.
+   Confirm the library displays the literal text, creates no image, and opens no script dialog.
 9. On `<printed-origin>/repeated.html`, select one exact `repeated claim` and press `Alt+Shift+S`.
-   Confirm one new Inbox quotation appears. Choose **Mark on page** while the repeated fixture is
-   active and confirm TraceMark reports that the quotation is ambiguous rather than guessing which
-   occurrence to mark.
+   Return to the library and choose **Search** to refresh it, then confirm one new Inbox quotation
+   appears. Keep the repeated fixture tab active, choose **Mark on page**, and confirm TraceMark
+   reports that the quotation is ambiguous rather than guessing which occurrence to mark.
 10. Open **Backups** and download both **JSON backup** and **Markdown**. Confirm both downloads
     complete. Check that JSON contains the captured records and edited note/tags; check that Markdown
-    contains the quotations and note, contains `&lt;img src=x onerror\\(1\\)&gt;`, and does not contain
-    a literal executable `<img src=x onerror=alert(1)>` element.
+    contains the quotations and note, contains `&lt;img src=x onerror=alert\(1\)&gt;`, and does not
+    contain a literal executable `<img src=x onerror=alert(1)>` element.
 11. Remove the temporary add-on, close the fixture server, and delete the disposable Firefox profile.

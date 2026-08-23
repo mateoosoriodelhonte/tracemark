@@ -70,9 +70,9 @@ Local AI starts disabled. Enabling it asks the browser for the optional
 `http://127.0.0.1:11434/*` origin and saves an Ollama model preference. For each user-requested
 action, the assistance service verifies that AI is enabled, the permission still exists, and one to
 twenty distinct stored highlight IDs are valid. It loads only those records and posts their
-quotation, title, URL, tags, and note to `/api/chat` with credentials omitted, redirects rejected,
-a 30-second timeout, and a one-megabyte response limit. Provider output must match a strict schema
-before it can be stored.
+internal highlight ID, quotation, title, URL, tags, and note to `/api/chat` with credentials
+omitted, redirects rejected, a 30-second timeout, and a one-megabyte response limit. Provider output
+must match a strict schema before it can be stored.
 
 Loopback HTTP is not encrypted. Ollama, the selected model, and other local software remain outside
 TraceMark's trust boundary.
