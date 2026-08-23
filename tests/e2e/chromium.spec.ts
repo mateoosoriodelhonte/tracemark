@@ -87,6 +87,15 @@ async function downloadText(download: Download): Promise<string> {
   return readFile(path, 'utf8');
 }
 
+async function cleanupTestResources(resources: {
+  closeContext: () => Promise<void>;
+  closeServer: () => Promise<void>;
+  removeProfile: () => Promise<void>;
+}): Promise<void> {
+  await resources.closeContext();
+  await Promise.all([resources.closeServer(), resources.removeProfile()]);
+}
+
 function seedBackup(origin: string): string {
   return JSON.stringify({
     format: 'tracemark-backup',
@@ -151,6 +160,36 @@ function seedBackup(origin: string): string {
     },
   });
 }
+
+test('cleanup waits for Chromium to close before removing its profile', async () => {
+  const events: string[] = [];
+  let releaseContext: () => void = () => undefined;
+  const contextClosed = new Promise<void>((resolveClose) => {
+    releaseContext = resolveClose;
+  });
+
+  const cleanup = cleanupTestResources({
+    async closeContext() {
+      events.push('context:start');
+      await contextClosed;
+      events.push('context:end');
+    },
+    async closeServer() {
+      events.push('server');
+    },
+    async removeProfile() {
+      events.push('profile');
+    },
+  });
+  await Promise.resolve();
+  const eventsBeforeContextClosed = [...events];
+  releaseContext();
+  await cleanup;
+
+  expect(eventsBeforeContextClosed).toEqual(['context:start']);
+  expect(events.slice(0, 2)).toEqual(['context:start', 'context:end']);
+  expect(events.slice(2)).toEqual(expect.arrayContaining(['server', 'profile']));
+});
 
 test('the packaged extension searches, edits, renders inert text, and exports', async () => {
   test.setTimeout(90_000);
@@ -262,10 +301,10 @@ test('the packaged extension searches, edits, renders inert text, and exports', 
     expect(markdown).not.toContain('<img src=x onerror=alert(1)>');
     expect(dialogMessages).toEqual([]);
   } finally {
-    await Promise.all([
-      context?.close() ?? Promise.resolve(),
-      fixtureServer.close(),
-      rm(profilePath, { force: true, recursive: true }),
-    ]);
+    await cleanupTestResources({
+      closeContext: () => context?.close() ?? Promise.resolve(),
+      closeServer: () => fixtureServer.close(),
+      removeProfile: () => rm(profilePath, { force: true, recursive: true }),
+    });
   }
 });
