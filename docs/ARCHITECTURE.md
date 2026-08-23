@@ -45,7 +45,9 @@ Svelte text interpolation; saved webpage text is not inserted as executable mark
 
 ### Anchoring
 
-1. The user opens the saved source page, keeps it active, and chooses **Mark on page**.
+1. The user opens the saved source page, keeps it active, and chooses **Mark on page**. A fresh or
+   revisited tab without `activeTab` receives actionable guidance to invoke the TraceMark toolbar
+   action or `Alt+Shift+S` on that tab and then retry.
 2. The anchor service checks that the active URL matches the saved source or canonical URL.
 3. It injects `/content-scripts/anchor.js` at runtime and sends an exact-text selector containing
    the quotation, prefix, and suffix.
@@ -67,9 +69,11 @@ protect them after download.
 ### Optional Ollama assistance
 
 Local AI starts disabled. Enabling it asks the browser for the optional
-`http://127.0.0.1:11434/*` origin; Firefox separately asks for optional `websiteContent` built-in
-data consent. Firefox requires both grants, while Chromium requires the origin. TraceMark saves an
-Ollama model preference only after permission succeeds. For each user-requested action, the UI and
+`http://127.0.0.1:11434/*` origin. Firefox uses two user gestures: **Enable local AI** immediately
+requests optional `websiteContent` and `browsingActivity` together, then **Continue enabling local
+AI** immediately requests the origin. Firefox requires both data types and the origin, while
+Chromium requires only the origin from one click. TraceMark saves an Ollama model preference only
+after the applicable permission flow succeeds. For each user-requested action, the UI and
 assistance service verify that AI is enabled and all applicable grants still exist before loading
 one to twenty distinct stored highlight IDs. It loads only those records and posts their
 internal highlight ID, quotation, title, URL, tags, and note to `/api/chat` with credentials

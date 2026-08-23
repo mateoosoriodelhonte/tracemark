@@ -43,9 +43,11 @@ See [docs/PERMISSIONS.md](docs/PERMISSIONS.md) for the complete permission ratio
 ## Optional Ollama processing
 
 Local AI is disabled by default. Enabling it requires a browser prompt for the only optional
-origin, `http://127.0.0.1:11434/*`. Firefox also requests its optional `websiteContent` built-in
-data consent in a separate prompt. Both Firefox grants must exist before TraceMark transmits saved
-research. For a requested AI action, TraceMark sends only the stored internal highlight ID,
+origin, `http://127.0.0.1:11434/*`. Firefox also requests its optional `websiteContent` and
+`browsingActivity` built-in data consent together in a data-collection-only prompt. The first
+**Enable local AI** click requests those data types; after approval, a separate **Continue enabling
+local AI** click requests the loopback origin. Both Firefox permission steps must succeed before
+TraceMark transmits saved research. For a requested AI action, TraceMark sends only the stored internal highlight ID,
 quotation, title, source URL, tags, and note belonging to the saved highlights the user has
 selected. It sends them to the Ollama chat API at
 `http://127.0.0.1:11434/api/chat` and stores the validated result in extension IndexedDB.
@@ -56,7 +58,8 @@ software. Users should assess those components before enabling local AI. An Olla
 configuration may itself contact other services; that behavior is outside TraceMark's control.
 
 Disabling local AI changes the stored provider to `none` and asks the browser to remove the
-optional origin permission plus Firefox's optional website-content data consent. TraceMark checks
+optional origin permission plus Firefox's optional website-content and browsing-activity data
+consent. TraceMark checks
 the applicable grants again before every Ollama request and sends nothing if a grant is missing,
 unsupported, or revoked. Browser settings remain the authoritative place to inspect or revoke
 extension permissions. If removal fails or TraceMark reloads while disabled with a residual Local

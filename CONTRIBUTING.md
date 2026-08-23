@@ -29,7 +29,7 @@ Use `pnpm dev:firefox` for the Firefox development runner. Generated browser bui
 2. Keep untrusted webpage, backup, and AI data behind the existing schemas and message boundary.
 3. Do not add a browser permission or network origin without updating `wxt.config.ts`, manifest and
    package assertions, [PRIVACY.md](PRIVACY.md), and [docs/PERMISSIONS.md](docs/PERMISSIONS.md).
-4. Preserve runtime-only content-script registration unless an approved design explicitly changes
+4. Preserve runtime `scripting.executeScript` injection unless an approved design explicitly changes
    the privacy model.
 5. Run formatting and the smallest relevant tests while iterating.
 
@@ -50,11 +50,11 @@ Useful commands:
 Run the full local quality gate before requesting review:
 
 ```sh
-pnpm package:build && pnpm check
+pnpm check
 ```
 
-The package build is required from a clean checkout because the Vitest suite includes assertions
-against both generated release ZIPs.
+The quality gate builds both exact release ZIPs before the Vitest archive assertions, so no archive
+needs to preexist in a clean checkout.
 
 Changes that affect browser startup, library workflows, or packaging should also run the relevant
 packaged tests described in [docs/TESTING.md](docs/TESTING.md). Capture and anchor changes require

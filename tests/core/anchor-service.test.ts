@@ -48,6 +48,36 @@ describe('AnchorService', () => {
     expect(executeScript).not.toHaveBeenCalled();
   });
 
+  test('turns a fresh-tab injection denial into actionable activeTab recovery guidance', async () => {
+    const service = new AnchorService({
+      queryActiveTabs: vi.fn().mockResolvedValue([{ id: 42, url: 'https://example.com/article' }]),
+      executeScript: vi.fn().mockRejectedValue(new Error('Missing host permission')),
+      sendMessage: vi.fn(),
+    });
+
+    await expect(service.apply(makeHighlight())).rejects.toMatchObject({
+      code: 'UNSUPPORTED_PAGE',
+      message:
+        'TraceMark cannot access this fresh tab yet. Invoke the TraceMark toolbar action or press Alt+Shift+S on this tab, then retry Mark on page. Browser-protected pages cannot be highlighted.',
+    });
+  });
+
+  test('guides a fresh tab whose URL is hidden until activeTab is granted', async () => {
+    const executeScript = vi.fn();
+    const service = new AnchorService({
+      queryActiveTabs: vi.fn().mockResolvedValue([{ id: 42 }]),
+      executeScript,
+      sendMessage: vi.fn(),
+    });
+
+    await expect(service.apply(makeHighlight())).rejects.toMatchObject({
+      code: 'UNSUPPORTED_PAGE',
+      message:
+        'TraceMark cannot access this fresh tab yet. Invoke the TraceMark toolbar action or press Alt+Shift+S on this tab, then retry Mark on page. Browser-protected pages cannot be highlighted.',
+    });
+    expect(executeScript).not.toHaveBeenCalled();
+  });
+
   test('rejects malformed content-script results at the privileged boundary', async () => {
     const service = new AnchorService({
       queryActiveTabs: vi.fn().mockResolvedValue([{ id: 42, url: 'https://example.com/article' }]),

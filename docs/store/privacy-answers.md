@@ -65,7 +65,7 @@ The Firefox manifest declares:
 {
   "data_collection_permissions": {
     "required": ["none"],
-    "optional": ["websiteContent"]
+    "optional": ["websiteContent", "browsingActivity"]
   }
 }
 ```
@@ -75,14 +75,15 @@ Use these exact explanations if AMO requests clarification:
 ```text
 Required data collection: none. TraceMark stores saved research in the local Firefox profile and does not transmit it to a TraceMark-operated service.
 
-Optional website content: only after the user chooses Enable Local AI and separately approves Firefox's optional website-content data consent and optional http://127.0.0.1:11434/* origin, TraceMark sends the stored fields of user-selected saved quotations to an Ollama process on the same device for the requested action. TraceMark rechecks both grants before every request and sends nothing if either grant is missing, unsupported, or revoked. Choosing Disable Local AI removes both grants separately. If cleanup fails or disabled settings reload with a residual grant, TraceMark exposes an explicit retry and blocks re-enabling; it does not remove the grant automatically on load. Local AI is disabled by default and is not required for capture, library, search, marking, backup, or export.
+Optional website content and browsing activity: only after the user chooses Enable Local AI does Firefox request websiteContent and browsingActivity together. These accurately cover the selected quotation/title and its saved source URL/hostname. After approval, TraceMark displays Continue enabling local AI; that second explicit click requests the optional http://127.0.0.1:11434/* origin. TraceMark sends the stored fields of user-selected saved quotations to an Ollama process on the same device only after both permission steps succeed. It rechecks the origin and both data types before every request and sends nothing if any grant is missing, unsupported, or revoked. Choosing Disable Local AI removes the origin and both data types in separate calls. If cleanup fails or disabled settings reloads with a residual grant, TraceMark exposes an explicit retry and blocks re-enabling; it does not remove the grant automatically on load. Local AI is disabled by default and is not required for capture, library, search, marking, backup, or export.
 ```
 
 Required extension-permission explanations match the Chrome answers for `activeTab`, `scripting`,
 `contextMenus`, and `storage`. Firefox uses its generated `sidebar_action` for the research library
 instead of Chrome's `sidePanel` permission. The only optional origin is
-`http://127.0.0.1:11434/*`. Firefox separately requests optional `websiteContent` built-in data
-consent from the explicit enable gesture. Chromium remains origin-only.
+`http://127.0.0.1:11434/*`. Firefox's first explicit click requests optional `websiteContent` and
+`browsingActivity` together; its second explicit click requests the origin. Chromium remains
+origin-only with one click.
 
 ## Audit boundary
 

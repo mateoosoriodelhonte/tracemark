@@ -94,10 +94,12 @@ Official Chrome guidance:
 - [ ] Upload the three 1280 × 800 screenshots in the documented order.
 - [ ] Confirm `Experimental: No`, `MIT License`, and that no payment, non-free service, software, or
       additional hardware is required. Ollama is an optional enhancement only.
-- [ ] Confirm the manifest disclosure is required `none`, optional `websiteContent`, consistent
+- [ ] Confirm the manifest disclosure is required `none`, optional `websiteContent` and
+      `browsingActivity`, consistent
       with [Store privacy and permission answers](store/privacy-answers.md).
-- [ ] Confirm the Local AI reviewer instructions describe Firefox's separate website-content and
-      loopback-origin prompts, both-grants fail-closed check, and separate removal on disable.
+- [ ] Confirm the Local AI reviewer instructions describe Firefox's two-click flow: combined
+      website-content/browsing-activity consent first, loopback-origin access second; all-grants
+      fail-closed checks; and separate removal on disable.
 - [ ] Manually submit the version. Record the submission state and respond to reviewer questions.
 - [ ] After Mozilla signs the version, download and retain the signed artifact; do not relabel the
       locally generated unsigned ZIP as signed.

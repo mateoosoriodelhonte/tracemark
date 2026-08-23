@@ -51,7 +51,7 @@ Playwright 1.62.1, Firefox 154.0, and geckodriver 0.37.1. Generated archives wer
 
 | Evidence                      | Recorded result                                                                                                                 |
 | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| Archive-free `pnpm check`     | 32 Vitest files and 253 tests passed; format, lint, typecheck, secret scan, packages, checksums, links, and screenshots passed. |
+| Archive-free `pnpm check`     | 33 Vitest files and 263 tests passed; format, lint, typecheck, secret scan, packages, checksums, links, and screenshots passed. |
 | Packaged Chromium             | 2 Playwright tests passed against a fresh profile and the real unpacked Chrome MV3 build.                                       |
 | Packaged Firefox strict run   | Firefox 154.0 temporarily installed the exact Firefox ZIP; packaged manifest, startup, library, edit, and exports passed.       |
 | Deterministic store assets    | All 4 assets regenerated and then passed structural/dimension check mode.                                                       |
@@ -62,8 +62,8 @@ The final browser release inventory is:
 
 | File                                   | Bytes   | SHA-256                                                                                          |
 | -------------------------------------- | ------- | ------------------------------------------------------------------------------------------------ |
-| `tracemark-1.0.0-chrome.zip`           | 166,576 | `5b0d3e22ff6de521190711ec8834a92d7f026e8399f6c9c7ad1eeef026fa2bd9`                               |
-| `tracemark-1.0.0-firefox.zip`          | 166,711 | `5e085ff5be7b7bad982a57c93bc5882f6514fa3d76f426b952158e7a42fd2043`                               |
+| `tracemark-1.0.0-chrome.zip`           | 167,051 | `baac07ddceb5573f24e582c7af8325c344c91495bf3cff6f65691c7c239c13ce`                               |
+| `tracemark-1.0.0-firefox.zip`          | 167,179 | `42fe0512f78c17e6a8526d367fab0d204f5e5d4f23bfc9c22813bcb84cb5c1c9`                               |
 | `SHA256SUMS`                           | 187     | Contains the two sorted lowercase browser-archive records above.                                 |
 | `tracemark-1.0.0-sources.zip` (review) | —       | Generated for Mozilla source review; intentionally excluded from the release checksum inventory. |
 
@@ -77,6 +77,25 @@ patterns without printing matched contents, checks screenshots, inspects ZIP lis
 the three ZIPs plus `SHA256SUMS`. Strict Firefox WebDriver execution remains a local release gate;
 the native browser gestures listed below remain manual checks in both browsers and are not claimed
 by CI.
+
+## Native-browser manual evidence status
+
+The native browser checklist is still pending; automated browser runs and mocks are not recorded as
+proof of browser-owned prompts or chrome.
+
+- Google Chrome 151.0.7922.138 was launched on August 22, 2026 with a new disposable profile and
+  the unpacked-build command-line flags, but no extension service worker appeared within 15
+  seconds. The dedicated Chrome-control connector was unavailable and macOS Accessibility access
+  to System Events was blocked. Manual **Load unpacked**, toolbar, native context menu, keyboard
+  shortcut, side panel, fresh-tab gesture recovery, and export interactions therefore were not
+  completed in Google Chrome.
+- The strict Firefox 154.0/geckodriver 0.37.1 fresh-profile run temporarily installed the exact ZIP
+  and passed its automated packaged-page checks. That harness opens the declared sidebar page in a
+  normal tab and cannot operate the native toolbar, context menu, command UI, sidebar chrome, or
+  permission doorhangers. Those gestures, fresh-tab recovery, and Firefox's actual two prompts
+  remain pending.
+
+Do not release or submit to either store until a human completes and records both checklists below.
 
 The normal Firefox command fails when Firefox or WebDriver cannot start. A developer who knowingly
 lacks that local prerequisite may opt into a clearly reported skip with:
@@ -133,9 +152,13 @@ record the Chrome version, OS, date, tester, and deviations while running this c
 6. Edit that quotation. Set tags to `chrome-evidence, release-ready` and the note to
    `Edited through the packaged Chrome research library.` Save, search for `chrome-evidence`, and
    confirm exactly that quotation remains.
-7. Return to `<printed-origin>/article.html` and keep it active. In the TraceMark side panel choose
+7. Close the original article tab, open `<printed-origin>/article.html` in a new tab, and keep it
+   active. In the TraceMark side panel choose **Mark on page** before invoking TraceMark on that
+   fresh tab. Confirm the status explicitly says to invoke the TraceMark toolbar action or press
+   `Alt+Shift+S` on that tab and then retry. Invoke the toolbar action, close the popup, and retry
    **Mark on page**. Confirm the status says `Marked the saved quotation on this page.`, all three
-   inline quote fragments are marked, and the page text is unchanged.
+   inline quote fragments are marked, and the page text is unchanged. If Chrome identifies the
+   page as protected, record that distinct limitation instead of claiming recovery.
 8. Clear the library search. On `<printed-origin>/hostile.html`, select exactly
    `<img src=x onerror=alert(1)>`. Right-click the selection and choose
    **Save selection to TraceMark**. Return to the library and choose **Search** to refresh it.
@@ -157,7 +180,8 @@ Firefox profile and download directory, and removes both after Firefox exits. Th
 
 1. Reads the generated manifest from the release ZIP and asserts Manifest V3, TraceMark `1.0.0`,
    add-on ID `tracemark@mateoosoriodelhonte.github.io`, minimum Firefox `142.0`, and the packaged
-   `sidepanel.html` sidebar declaration.
+   `sidepanel.html` sidebar declaration and both optional data types, `websiteContent` and
+   `browsingActivity`.
 2. Starts real Firefox through WebDriver and temporarily installs that ZIP with
    `installAddon(path, true)`. The returned add-on ID must match the manifest.
 3. Maps that add-on ID to the deterministic UUID
@@ -230,10 +254,13 @@ evidence:
 6. Edit that quotation. Set tags to `firefox-evidence, release-ready` and the note to
    `Edited through the packaged Firefox research library.` Save, search for `firefox-evidence`, and
    confirm exactly that quotation remains.
-7. Return to `<printed-origin>/article.html` and keep it active. In the TraceMark sidebar choose
-   **Mark on page** for the saved quotation. Confirm the status says
-   `Marked the saved quotation on this page.`, all three inline quote fragments are marked, and the
-   page text is unchanged.
+7. Close the original article tab, open `<printed-origin>/article.html` in a new tab, and keep it
+   active. In the TraceMark sidebar choose **Mark on page** before invoking TraceMark on that fresh
+   tab. Confirm the status explicitly says to invoke the TraceMark toolbar action or press
+   `Alt+Shift+S` on that tab and then retry. Invoke the toolbar action, close the popup, and retry
+   **Mark on page**. Confirm the status says `Marked the saved quotation on this page.`, all three
+   inline quote fragments are marked, and the page text is unchanged. If Firefox identifies the
+   page as protected, record that distinct limitation instead of claiming recovery.
 8. Clear the library search. On `<printed-origin>/hostile.html`, select exactly
    `<img src=x onerror=alert(1)>`. Right-click the selection and choose
    **Save selection to TraceMark**. Return to the library and choose **Search** to refresh it.
@@ -242,8 +269,15 @@ evidence:
    Return to the library and choose **Search** to refresh it, then confirm one new Inbox quotation
    appears. Keep the repeated fixture tab active, choose **Mark on page**, and confirm TraceMark
    reports that the quotation is ambiguous rather than guessing which occurrence to mark.
-10. Open **Backups** and download both **JSON backup** and **Markdown**. Confirm both downloads
+10. With Ollama running locally, choose **Enable local AI**. Confirm Firefox first prompts for
+    `websiteContent` and `browsingActivity` together and does not prompt for the loopback origin in
+    the same click. Approve it and confirm TraceMark displays **Continue enabling local AI**.
+    Choose that button with a second click, confirm Firefox then prompts for only
+    `http://127.0.0.1:11434/*`, and approve it. Reloading between the two clicks must instead show
+    cleanup guidance and must not silently continue to the origin prompt. Disable Local AI after
+    recording the result.
+11. Open **Backups** and download both **JSON backup** and **Markdown**. Confirm both downloads
     complete. Check that JSON contains the captured records and edited note/tags; check that Markdown
     contains the quotations and note, contains `&lt;img src=x onerror=alert\(1\)&gt;`, and does not
     contain a literal executable `<img src=x onerror=alert(1)>` element.
-11. Remove the temporary add-on, close the fixture server, and delete the disposable Firefox profile.
+12. Remove the temporary add-on, close the fixture server, and delete the disposable Firefox profile.

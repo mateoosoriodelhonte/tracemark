@@ -17,6 +17,10 @@ type Manifest = {
     gecko?: {
       id?: string;
       strict_min_version?: string;
+      data_collection_permissions?: {
+        required?: string[];
+        optional?: string[];
+      };
     };
   };
 };
@@ -158,6 +162,10 @@ describe('v1.0.0 release packages', () => {
     expect(manifest.browser_specific_settings?.gecko).toMatchObject({
       id: 'tracemark@mateoosoriodelhonte.github.io',
       strict_min_version: '142.0',
+      data_collection_permissions: {
+        required: ['none'],
+        optional: ['websiteContent', 'browsingActivity'],
+      },
     });
   });
 });

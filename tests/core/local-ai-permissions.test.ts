@@ -2,6 +2,17 @@ import { describe, expect, test, vi } from 'vitest';
 import { createLocalAIPermissionManager } from '../../src/core/local-ai-permissions';
 
 const ollamaOrigin = 'http://127.0.0.1:11434/*';
+const firefoxDataCollection = ['websiteContent', 'browsingActivity'];
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, resolve, reject };
+}
 
 function permissionApi(
   granted: { origins?: string[]; permissions?: string[]; data_collection?: string[] } = {
@@ -18,87 +29,133 @@ function permissionApi(
 }
 
 describe('local AI browser permissions', () => {
-  test('Chromium requests only the optional Ollama origin', async () => {
+  test('Chromium requests the exact optional origin synchronously without inspecting grants first', async () => {
+    const pending = deferred<boolean>();
     const api = permissionApi();
+    api.request.mockReturnValueOnce(pending.promise);
     const manager = createLocalAIPermissionManager(api, false);
 
-    await expect(manager.request()).resolves.toBe('granted');
+    const result = manager.requestOrigin();
 
     expect(api.request).toHaveBeenCalledOnce();
     expect(api.request).toHaveBeenCalledWith({ origins: [ollamaOrigin] });
+    expect(api.contains).not.toHaveBeenCalled();
     expect(api.getAll).not.toHaveBeenCalled();
-    expect(api.contains).toHaveBeenCalledWith({ origins: [ollamaOrigin] });
+    pending.resolve(true);
+    await expect(result).resolves.toBe('granted');
   });
 
-  test('Firefox fails closed when data-collection consent cannot be feature-detected', async () => {
-    const api = permissionApi({ origins: [], permissions: [] });
+  test('Firefox requests both optional data types synchronously before any inspection', async () => {
+    const pending = deferred<boolean>();
+    const api = permissionApi({ origins: [], permissions: [], data_collection: [] });
+    api.request.mockReturnValueOnce(pending.promise);
     const manager = createLocalAIPermissionManager(api, true);
 
-    await expect(manager.request()).resolves.toBe('unsupported');
+    const result = manager.requestDataCollection();
+
+    expect(api.request).toHaveBeenCalledOnce();
+    expect(api.request).toHaveBeenCalledWith({ data_collection: firefoxDataCollection });
+    expect(api.contains).not.toHaveBeenCalled();
+    expect(api.getAll).not.toHaveBeenCalled();
+    pending.resolve(true);
+    await expect(result).resolves.toBe('granted');
+  });
+
+  test('Firefox origin access requires a separate method call and a second synchronous request', async () => {
+    const dataRequest = deferred<boolean>();
+    const originRequest = deferred<boolean>();
+    const api = permissionApi({ origins: [], permissions: [], data_collection: [] });
+    api.request.mockReturnValueOnce(dataRequest.promise).mockReturnValueOnce(originRequest.promise);
+    const manager = createLocalAIPermissionManager(api, true);
+
+    const dataResult = manager.requestDataCollection();
+    expect(api.request).toHaveBeenCalledTimes(1);
+    dataRequest.resolve(true);
+    await expect(dataResult).resolves.toBe('granted');
+    expect(api.request).toHaveBeenCalledTimes(1);
+
+    const originResult = manager.requestOrigin();
+    expect(api.request).toHaveBeenCalledTimes(2);
+    expect(api.request).toHaveBeenLastCalledWith({ origins: [ollamaOrigin] });
+    expect(api.contains).not.toHaveBeenCalled();
+    expect(api.getAll).not.toHaveBeenCalled();
+    originRequest.resolve(true);
+    await expect(originResult).resolves.toBe('granted');
+  });
+
+  test('Firefox cannot request the origin before the explicit data-consent step', async () => {
+    const api = permissionApi({ origins: [], permissions: [], data_collection: [] });
+    const manager = createLocalAIPermissionManager(api, true);
+
+    await expect(manager.requestOrigin()).resolves.toBe('cleanup-required');
 
     expect(api.request).not.toHaveBeenCalled();
   });
 
-  test('Firefox requests website content and origin grants separately', async () => {
+  test('Firefox reports unsupported data consent when the browser rejects that request shape', async () => {
     const api = permissionApi({ origins: [], permissions: [], data_collection: [] });
+    api.request.mockRejectedValueOnce(new Error('Unexpected property data_collection'));
     const manager = createLocalAIPermissionManager(api, true);
 
-    await expect(manager.request()).resolves.toBe('granted');
+    await expect(manager.requestDataCollection()).resolves.toBe('unsupported');
 
-    expect(api.request.mock.calls).toEqual([
-      [{ data_collection: ['websiteContent'] }],
-      [{ origins: [ollamaOrigin] }],
-    ]);
+    expect(api.request).toHaveBeenCalledWith({ data_collection: firefoxDataCollection });
   });
 
-  test('Firefox rolls back newly granted website consent when origin access is denied', async () => {
+  test('Firefox denial leaves the second prompt unavailable and rollback removes nothing', async () => {
+    const api = permissionApi({ origins: [], permissions: [], data_collection: [] });
+    api.request.mockResolvedValueOnce(false);
+    const manager = createLocalAIPermissionManager(api, true);
+
+    await expect(manager.requestDataCollection()).resolves.toBe('denied');
+    await expect(manager.requestOrigin()).resolves.toBe('cleanup-required');
+    await expect(manager.rollbackRequest()).resolves.toBe(true);
+
+    expect(api.request).toHaveBeenCalledOnce();
+    expect(api.remove).not.toHaveBeenCalled();
+  });
+
+  test('Firefox rolls back both data types when the separately requested origin is denied', async () => {
     const api = permissionApi({ origins: [], permissions: [], data_collection: [] });
     api.request.mockResolvedValueOnce(true).mockResolvedValueOnce(false);
     const manager = createLocalAIPermissionManager(api, true);
 
-    await expect(manager.request()).resolves.toBe('denied');
+    await expect(manager.requestDataCollection()).resolves.toBe('granted');
+    await expect(manager.requestOrigin()).resolves.toBe('denied');
+    await expect(manager.rollbackRequest()).resolves.toBe(true);
 
     expect(api.remove).toHaveBeenCalledOnce();
-    expect(api.remove).toHaveBeenCalledWith({ data_collection: ['websiteContent'] });
+    expect(api.remove).toHaveBeenCalledWith({ data_collection: firefoxDataCollection });
   });
 
-  test('Firefox retains a failed denial rollback for an explicit retry', async () => {
+  test('Firefox retains a failed rollback for an explicit cleanup retry', async () => {
     const api = permissionApi({ origins: [], permissions: [], data_collection: [] });
     api.request.mockResolvedValueOnce(true).mockResolvedValueOnce(false);
     api.remove.mockResolvedValueOnce(false).mockResolvedValueOnce(true);
     const manager = createLocalAIPermissionManager(api, true);
 
-    await expect(manager.request()).resolves.toBe('denied');
+    await expect(manager.requestDataCollection()).resolves.toBe('granted');
+    await expect(manager.requestOrigin()).resolves.toBe('denied');
+    await expect(manager.rollbackRequest()).resolves.toBe(false);
+    await expect(manager.requestDataCollection()).resolves.toBe('cleanup-required');
     await expect(manager.rollbackRequest()).resolves.toBe(true);
 
     expect(api.remove).toHaveBeenCalledTimes(2);
-    expect(api.remove).toHaveBeenLastCalledWith({ data_collection: ['websiteContent'] });
-  });
-
-  test('a new enable attempt cannot erase an outstanding failed rollback', async () => {
-    const api = permissionApi({ origins: [], permissions: [], data_collection: [] });
-    api.request.mockResolvedValueOnce(true).mockResolvedValueOnce(false);
-    api.remove.mockResolvedValue(false);
-    const manager = createLocalAIPermissionManager(api, true);
-
-    await expect(manager.request()).resolves.toBe('denied');
-    await expect(manager.request()).resolves.toBe('cleanup-required');
-
     expect(api.request).toHaveBeenCalledTimes(2);
-    expect(api.remove).toHaveBeenCalledOnce();
   });
 
-  test('a new manager detects residual Firefox consent while local AI is disabled', async () => {
+  test('a reload detects partial Firefox consent and requires cleanup instead of continuing', async () => {
     const api = permissionApi({
       origins: [],
       permissions: [],
-      data_collection: ['websiteContent'],
+      data_collection: firefoxDataCollection,
     });
     const manager = createLocalAIPermissionManager(api, true);
 
     await expect(manager.hasAny()).resolves.toBe(true);
+    await expect(manager.requestDataCollection()).resolves.toBe('cleanup-required');
 
-    expect(api.remove).not.toHaveBeenCalled();
+    expect(api.request).not.toHaveBeenCalled();
   });
 
   test('Chromium reports unknown when origin permission inspection fails', async () => {
@@ -126,77 +183,48 @@ describe('local AI browser permissions', () => {
     await expect(manager.hasAny()).rejects.toThrow('data consent inspection failed');
   });
 
-  test('Firefox reports unknown data-consent inspection even when the origin is known granted', async () => {
-    const api = permissionApi({
-      origins: [ollamaOrigin],
-      permissions: [],
-      data_collection: ['websiteContent'],
-    });
-    api.getAll.mockRejectedValue(new Error('data consent inspection failed'));
-    const manager = createLocalAIPermissionManager(api, true);
-
-    await expect(manager.hasAny()).rejects.toThrow('data consent inspection failed');
-  });
-
-  test('a failed reconciliation blocks a later request from accepting a residual grant', async () => {
+  test('a failed reconciliation blocks a later request from accepting an unknown residual grant', async () => {
     const api = permissionApi();
-    api.contains.mockRejectedValueOnce(new Error('permission API failed')).mockResolvedValue(true);
+    api.contains.mockRejectedValueOnce(new Error('permission API failed'));
     const manager = createLocalAIPermissionManager(api, false);
 
     await expect(manager.hasAny()).rejects.toThrow('permission API failed');
-    await expect(manager.request()).resolves.toBe('cleanup-required');
+    await expect(manager.requestOrigin()).resolves.toBe('cleanup-required');
 
-    expect(api.contains).toHaveBeenCalledOnce();
     expect(api.request).not.toHaveBeenCalled();
   });
 
-  test('Firefox preserves pre-existing website consent when origin access is denied', async () => {
-    const api = permissionApi({
-      origins: [],
-      permissions: [],
-      data_collection: ['websiteContent'],
-    });
-    api.request.mockResolvedValue(false);
-    const manager = createLocalAIPermissionManager(api, true);
+  test('unknown inspection can be cleaned up and a later request starts from a reset state', async () => {
+    const api = permissionApi();
+    api.contains
+      .mockRejectedValueOnce(new Error('permission API failed'))
+      .mockResolvedValueOnce(false);
+    const manager = createLocalAIPermissionManager(api, false);
 
-    await expect(manager.request()).resolves.toBe('denied');
+    await expect(manager.hasAny()).rejects.toThrow('permission API failed');
+    await expect(manager.remove()).resolves.toBe(true);
+    await expect(manager.requestOrigin()).resolves.toBe('granted');
 
-    expect(api.remove).not.toHaveBeenCalled();
+    expect(api.request).toHaveBeenCalledOnce();
+    expect(api.request).toHaveBeenCalledWith({ origins: [ollamaOrigin] });
   });
 
-  test('rollback after a downstream failure removes only grants acquired by this request', async () => {
+  test('Firefox rejects use when either declared data type is revoked externally', async () => {
     const api = permissionApi({
       origins: [ollamaOrigin],
       permissions: [],
       data_collection: ['websiteContent'],
-    });
-    const manager = createLocalAIPermissionManager(api, true);
-
-    await expect(manager.request()).resolves.toBe('granted');
-    await expect(manager.rollbackRequest()).resolves.toBe(true);
-
-    expect(api.request).not.toHaveBeenCalled();
-    expect(api.remove).not.toHaveBeenCalled();
-  });
-
-  test('Firefox rejects use after website-content consent is revoked externally', async () => {
-    const api = permissionApi({
-      origins: [ollamaOrigin],
-      permissions: [],
-      data_collection: [],
     });
     const manager = createLocalAIPermissionManager(api, true);
 
     await expect(manager.has()).resolves.toBe(false);
-
-    expect(api.contains).toHaveBeenCalledWith({ origins: [ollamaOrigin] });
   });
 
-  test('Firefox removes the origin and data grant with separate calls', async () => {
+  test('Firefox removes the origin and both data types with separate calls', async () => {
     const api = permissionApi({
       origins: [ollamaOrigin],
       permissions: [],
-      data_collection: ['websiteContent'],
+      data_collection: firefoxDataCollection,
     });
     const manager = createLocalAIPermissionManager(api, true);
 
@@ -204,15 +232,28 @@ describe('local AI browser permissions', () => {
 
     expect(api.remove.mock.calls).toEqual([
       [{ origins: [ollamaOrigin] }],
-      [{ data_collection: ['websiteContent'] }],
+      [{ data_collection: firefoxDataCollection }],
     ]);
   });
 
-  test('Firefox still removes website consent when origin removal fails', async () => {
+  test('Firefox removes both declared data types when only one residual type is visible', async () => {
+    const api = permissionApi({
+      origins: [],
+      permissions: [],
+      data_collection: ['browsingActivity'],
+    });
+    const manager = createLocalAIPermissionManager(api, true);
+
+    await expect(manager.remove()).resolves.toBe(true);
+
+    expect(api.remove).toHaveBeenCalledWith({ data_collection: firefoxDataCollection });
+  });
+
+  test('Firefox still removes data consent when origin removal fails', async () => {
     const api = permissionApi({
       origins: [ollamaOrigin],
       permissions: [],
-      data_collection: ['websiteContent'],
+      data_collection: firefoxDataCollection,
     });
     api.remove
       .mockRejectedValueOnce(new Error('origin removal failed'))
@@ -223,7 +264,7 @@ describe('local AI browser permissions', () => {
 
     expect(api.remove.mock.calls).toEqual([
       [{ origins: [ollamaOrigin] }],
-      [{ data_collection: ['websiteContent'] }],
+      [{ data_collection: firefoxDataCollection }],
     ]);
   });
 

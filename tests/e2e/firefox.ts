@@ -37,7 +37,11 @@ type FirefoxManifest = {
   name?: string;
   version?: string;
   browser_specific_settings?: {
-    gecko?: { id?: string; strict_min_version?: string };
+    gecko?: {
+      id?: string;
+      strict_min_version?: string;
+      data_collection_permissions?: { required?: string[]; optional?: string[] };
+    };
   };
   sidebar_action?: { default_panel?: string; default_title?: string };
 };
@@ -55,6 +59,10 @@ function assertFirefoxManifest(manifest: FirefoxManifest): void {
   assert.equal(manifest.version, '1.0.0');
   assert.equal(manifest.browser_specific_settings?.gecko?.id, ADDON_ID);
   assert.equal(manifest.browser_specific_settings?.gecko?.strict_min_version, '142.0');
+  assert.deepEqual(manifest.browser_specific_settings?.gecko?.data_collection_permissions, {
+    required: ['none'],
+    optional: ['websiteContent', 'browsingActivity'],
+  });
   assert.deepEqual(manifest.sidebar_action, {
     default_panel: 'sidepanel.html',
     default_title: 'TraceMark Research Library',
@@ -368,7 +376,7 @@ async function main(): Promise<void> {
       await exercisePackagedLibrary(driver, backupPath, downloadDirectory);
       console.log(`Firefox ${browserVersion}: temporarily installed ${installedId}.`);
       console.log(
-        'PASS: packaged manifest/startup/sidebar, import, library, search, edit, inert rendering, JSON export, and Markdown export.',
+        'PASS: packaged manifest/startup/declared sidebar page in a normal tab, import, library, search, edit, inert rendering, JSON export, and Markdown export.',
       );
     },
   });

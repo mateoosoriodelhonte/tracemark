@@ -25,8 +25,9 @@ Both browsers declare exactly one optional origin:
 
 Neither build declares a static `host_permissions` value or `content_scripts` entry.
 
-Firefox also declares required data collection `none` and optional built-in data consent
-`websiteContent`. That data consent is not a host permission and is not granted at installation.
+Firefox also declares required data collection `none` and optional built-in data consent for
+`websiteContent` and `browsingActivity`. Those data types are not host permissions and are not
+granted at installation.
 
 ## Why each permission exists
 
@@ -51,11 +52,13 @@ Ollama process, models, browser, operating system, or other local software trust
 disable local AI and remove the origin permission through TraceMark; they can also inspect or revoke
 it in browser extension settings.
 
-On Firefox, the **Enable local AI** gesture makes two separate optional permission requests: first
-`data_collection: ["websiteContent"]`, then the exact Ollama origin. TraceMark requires both grants
-before every Ollama request. If the browser does not expose built-in data consent, or either grant
-is revoked outside TraceMark, transmission fails closed. Disabling local AI separately removes the
-origin and website-content consent. Chromium requests and checks only the optional origin.
+On Firefox, enabling Local AI requires two explicit clicks. **Enable local AI** immediately requests
+`data_collection: ["websiteContent", "browsingActivity"]` without a preflight permission
+inspection. After approval, **Continue enabling local AI** immediately requests the exact Ollama
+origin with a second user gesture. TraceMark requires the origin and both data types before every
+Ollama request. If built-in data consent is unavailable, or any applicable grant is revoked,
+transmission fails closed. Disabling Local AI separately removes the origin and both data types.
+Chromium requests and checks only the optional origin from its single **Enable local AI** click.
 
 Failed removal remains recoverable: the disabled library blocks **Enable local AI** and exposes
 **Retry permission removal** until cleanup succeeds. On reload, TraceMark reconciles the disabled
@@ -87,7 +90,10 @@ manifest list.
 `activeTab` depends on a browser-recognized user gesture. Opening the research library by URL or
 automating its DOM does not manufacture that grant. Browser-internal pages, browser store pages, and
 browser-owned PDF viewers can also reject script injection. TraceMark reports those cases as
-unsupported rather than requesting broader standing access.
+unsupported rather than requesting broader standing access. On a normal fresh or revisited source
+tab, a failed anchor injection explains that the user must invoke the TraceMark toolbar action or
+press `Alt+Shift+S` on that tab before retrying **Mark on page**. Protected pages can still reject
+injection after that gesture.
 
 Generated manifests can be audited with:
 

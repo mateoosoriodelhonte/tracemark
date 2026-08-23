@@ -22,7 +22,10 @@ export async function startFixtureServer(): Promise<FixtureServer> {
     const fixtureName = basename(requestedPath);
 
     if (!fixtureName.endsWith('.html') || requestedPath !== `/${fixtureName}`) {
-      response.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' });
+      response.writeHead(404, {
+        'cache-control': 'no-store',
+        'content-type': 'text/plain; charset=utf-8',
+      });
       response.end('Fixture not found');
       return;
     }
@@ -35,7 +38,10 @@ export async function startFixtureServer(): Promise<FixtureServer> {
       });
       response.end(content);
     } catch {
-      response.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' });
+      response.writeHead(404, {
+        'cache-control': 'no-store',
+        'content-type': 'text/plain; charset=utf-8',
+      });
       response.end('Fixture not found');
     }
   });

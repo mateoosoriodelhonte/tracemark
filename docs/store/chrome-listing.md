@@ -68,7 +68,7 @@ TraceMark requires no account, login, payment, or test credentials. Ollama and L
 2. Confirm the selected quotation and source, then choose “Save quotation.”
 3. Open “TraceMark Research Library” in Chrome's side panel. Confirm the quotation appears and can be found with Search.
 4. Choose Edit to add a tag or note, then save the change.
-5. Return to the source tab and choose “Mark on page.” TraceMark marks only one unambiguous exact match and reports changed or repeated text instead of guessing.
+5. Close the original source tab, reopen the same source in a fresh tab, and choose “Mark on page.” Confirm TraceMark tells you to invoke its toolbar action or Alt+Shift+S on that tab and retry. Invoke the TraceMark toolbar action on the fresh tab, then retry “Mark on page.” TraceMark marks only one unambiguous exact match and reports changed or repeated text instead of guessing.
 6. Open Backups and verify that “Download JSON backup” and “Download Markdown” create local files.
 
 The extension has no static content script or standing website host permission. Capture and Mark on page require a browser-recognized user gesture and an active normal webpage. Browser-internal pages, Chrome Web Store pages, and browser-owned PDF viewers can reject script injection.

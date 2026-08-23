@@ -160,7 +160,8 @@ mount(App, {
   target: document.getElementById('app')!,
   props: {
     request,
-    requestLocalAIPermissions: async () => 'granted',
+    requestLocalAIDataCollection: async () => 'granted',
+    requestLocalAIOrigin: async () => 'granted',
     rollbackLocalAIPermissions: async () => true,
     removeLocalAIPermissions: async () => true,
     hasLocalAIPermissions: async () => true,

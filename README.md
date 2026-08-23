@@ -74,10 +74,12 @@ or deleted; deleting a collection moves its quotations to Inbox.
 
 ### Mark a quotation on its source page
 
-Open the saved source page, keep that tab active, and choose **Mark on page** for the quotation.
-TraceMark marks only an unambiguous exact match. If the quote is missing, duplicated without enough
-context, or changed, TraceMark refuses to guess. The mark is a runtime page annotation, not an edit
-to the website, and does not persist after the page is reloaded.
+Open the saved source in a fresh or revisited tab, keep it active, and choose **Mark on page**. With
+no current `activeTab` grant, TraceMark tells you to invoke its toolbar action or press
+`Alt+Shift+S` on that tab and then retry **Mark on page**. TraceMark marks only an unambiguous exact
+match. If the quote is missing, duplicated without enough context, or changed, TraceMark refuses to
+guess. The mark is a runtime page annotation, not an edit to the website, and does not persist
+after the page is reloaded. Browser-protected pages can remain unavailable even after a gesture.
 
 ### Back up and restore
 
@@ -106,9 +108,10 @@ Ollama origin silently.
 2. Make sure Ollama is running locally. `ollama serve` starts its server when another Ollama process
    is not already serving it.
 3. In TraceMark's **Local AI** section, confirm the model name and choose **Enable local AI**.
-4. Approve access to `http://127.0.0.1:11434/*` when the browser asks. Firefox asks separately for
-   optional website-content data consent; both grants are required before TraceMark sends selected
-   research to Ollama.
+4. Approve access to `http://127.0.0.1:11434/*` when the browser asks. Firefox uses two explicit
+   steps: the first **Enable local AI** click requests optional website-content and browsing-activity
+   data consent, then **Continue enabling local AI** requests the loopback origin with a second
+   click. All applicable grants are required before TraceMark sends selected research to Ollama.
 5. Select one or more saved quotations, then choose **Summarize**, **Explain**, **Suggest tags**, or
    **Overview**.
 
@@ -119,7 +122,7 @@ are separate components whose trustworthiness you must assess. See the
 [Ollama API introduction](https://docs.ollama.com/api/introduction).
 
 Disabling local AI first saves the disabled preference and then asks the browser to remove the
-optional Ollama origin permission and, on Firefox, the optional website-content data consent.
+optional Ollama origin permission and, on Firefox, both optional data-consent types.
 TraceMark rechecks both applicable grants before every request and fails closed if either was
 revoked in browser settings. If permission cleanup fails, or a disabled library reloads with a
 residual Local AI grant, TraceMark shows **Retry permission removal** and blocks re-enabling until
@@ -147,11 +150,11 @@ pnpm build:firefox       # build .output/firefox-mv3
 pnpm package:build       # create Chrome and Firefox release ZIPs
 pnpm screenshots         # regenerate deterministic store screenshots
 pnpm screenshots:check   # validate screenshot filenames, dimensions, and sizes
-pnpm check               # quality gate after release ZIPs exist
+pnpm check               # self-contained quality and release-package gate
 ```
 
-From a clean checkout, run `pnpm package:build && pnpm check`; release ZIP contract tests are part of
-the Vitest suite and expect both archives to exist.
+From a clean checkout, `pnpm check` builds both exact release archives before running the ZIP
+contract tests; release archives do not need to exist in advance.
 
 For the full test matrix, packaged-browser evidence, and manual browser-gesture checklists, see
 [Testing TraceMark](docs/TESTING.md). Contributors should also read [CONTRIBUTING.md](CONTRIBUTING.md).
@@ -167,8 +170,9 @@ For the full test matrix, packaged-browser evidence, and manual browser-gesture 
 
 TraceMark is at version 1.0.0 release-candidate readiness. Chrome and Firefox archives validate,
 and packaged-browser automation covers startup, import, library, search, edit, inert rendering, and
-exports. Browser-chrome capture and anchor gestures remain integration-tested plus manual release
-checks. Store submission and publication have not occurred.
+exports. Browser-chrome capture, fresh-tab anchor recovery, native panel/sidebar operation, and
+Firefox permission prompts remain integration-tested plus pending manual release checks. Store
+submission and publication have not occurred.
 
 ## License
 

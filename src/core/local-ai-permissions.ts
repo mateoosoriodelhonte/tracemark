@@ -1,5 +1,5 @@
 export const OLLAMA_PERMISSION_ORIGIN = 'http://127.0.0.1:11434/*';
-export const FIREFOX_WEBSITE_CONTENT_PERMISSION = 'websiteContent';
+export const FIREFOX_LOCAL_AI_DATA_PERMISSIONS = ['websiteContent', 'browsingActivity'] as const;
 
 export type LocalAIPermissionRequestResult =
   'granted' | 'denied' | 'unsupported' | 'cleanup-required';
@@ -18,7 +18,8 @@ export interface LocalAIPermissionApi {
 }
 
 export interface LocalAIPermissionManager {
-  request(): Promise<LocalAIPermissionRequestResult>;
+  requestDataCollection(): Promise<LocalAIPermissionRequestResult>;
+  requestOrigin(): Promise<LocalAIPermissionRequestResult>;
   rollbackRequest(): Promise<boolean>;
   has(): Promise<boolean>;
   hasAny(): Promise<boolean>;
@@ -26,8 +27,8 @@ export interface LocalAIPermissionManager {
 }
 
 const originPermission = { origins: [OLLAMA_PERMISSION_ORIGIN] };
-const websiteContentPermission = {
-  data_collection: [FIREFOX_WEBSITE_CONTENT_PERMISSION],
+const dataCollectionPermission = {
+  data_collection: [...FIREFOX_LOCAL_AI_DATA_PERMISSIONS],
 };
 
 function supportsDataCollection(permissions: PermissionSet): permissions is PermissionSet & {
@@ -36,12 +37,21 @@ function supportsDataCollection(permissions: PermissionSet): permissions is Perm
   return Array.isArray(permissions.data_collection);
 }
 
+function hasAllDataPermissions(granted: string[]): boolean {
+  return FIREFOX_LOCAL_AI_DATA_PERMISSIONS.every((permission) => granted.includes(permission));
+}
+
+function hasAnyDataPermission(granted: string[]): boolean {
+  return FIREFOX_LOCAL_AI_DATA_PERMISSIONS.some((permission) => granted.includes(permission));
+}
+
 export function createLocalAIPermissionManager(
   permissions: LocalAIPermissionApi,
   firefox: boolean,
 ): LocalAIPermissionManager {
   let acquiredByLastRequest: PermissionSet[] = [];
   let cleanupInspectionRequired = false;
+  let enableStage: 'idle' | 'data-granted' | 'origin-granted' = 'idle';
 
   async function removeSets(permissionSets: PermissionSet[]): Promise<boolean> {
     let removed = true;
@@ -65,56 +75,58 @@ export function createLocalAIPermissionManager(
       }
     }
     acquiredByLastRequest = failed;
+    if (failed.length === 0) {
+      enableStage = 'idle';
+      cleanupInspectionRequired = false;
+    }
     return failed.length === 0;
   }
 
   return {
-    async request() {
-      if (acquiredByLastRequest.length > 0 || cleanupInspectionRequired) {
+    async requestDataCollection() {
+      if (!firefox) return 'unsupported';
+      if (cleanupInspectionRequired || acquiredByLastRequest.length > 0 || enableStage !== 'idle') {
         return 'cleanup-required';
       }
-      if (!firefox) {
-        try {
-          if (await permissions.contains(originPermission)) return 'granted';
-          if (!(await permissions.request(originPermission))) return 'denied';
-          acquiredByLastRequest = [originPermission];
-          return 'granted';
-        } catch {
-          return 'denied';
-        }
-      }
 
-      if (typeof permissions.getAll !== 'function') return 'unsupported';
-      let existing: PermissionSet;
+      let request: Promise<boolean>;
       try {
-        existing = await permissions.getAll();
+        request = permissions.request(dataCollectionPermission);
       } catch {
         return 'unsupported';
       }
-      if (!supportsDataCollection(existing)) return 'unsupported';
-
-      const hadWebsiteContent = existing.data_collection.includes(
-        FIREFOX_WEBSITE_CONTENT_PERMISSION,
-      );
-      const hadOrigin = existing.origins?.includes(OLLAMA_PERMISSION_ORIGIN) ?? false;
-      let acquiredWebsiteContent = false;
-
       try {
-        if (!hadWebsiteContent) {
-          if (!(await permissions.request(websiteContentPermission))) return 'denied';
-          acquiredWebsiteContent = true;
-          acquiredByLastRequest.push(websiteContentPermission);
-        }
-        if (!hadOrigin && !(await permissions.request(originPermission))) {
-          if (acquiredWebsiteContent) await rollbackAcquiredPermissions();
-          return 'denied';
-        }
-        if (!hadOrigin) acquiredByLastRequest.push(originPermission);
-        return 'granted';
+        if (!(await request)) return 'denied';
       } catch {
-        if (acquiredWebsiteContent) await rollbackAcquiredPermissions();
+        return 'unsupported';
+      }
+      acquiredByLastRequest = [dataCollectionPermission];
+      enableStage = 'data-granted';
+      return 'granted';
+    },
+
+    async requestOrigin() {
+      if (cleanupInspectionRequired) return 'cleanup-required';
+      if (firefox) {
+        if (enableStage !== 'data-granted') return 'cleanup-required';
+      } else if (acquiredByLastRequest.length > 0 || enableStage !== 'idle') {
+        return 'cleanup-required';
+      }
+
+      let request: Promise<boolean>;
+      try {
+        request = permissions.request(originPermission);
+      } catch {
         return 'denied';
       }
+      try {
+        if (!(await request)) return 'denied';
+      } catch {
+        return 'denied';
+      }
+      acquiredByLastRequest.push(originPermission);
+      enableStage = 'origin-granted';
+      return 'granted';
     },
 
     async rollbackRequest() {
@@ -127,10 +139,7 @@ export function createLocalAIPermissionManager(
         if (!hasOrigin || !firefox) return hasOrigin;
         if (typeof permissions.getAll !== 'function') return false;
         const granted = await permissions.getAll();
-        return (
-          supportsDataCollection(granted) &&
-          granted.data_collection.includes(FIREFOX_WEBSITE_CONTENT_PERMISSION)
-        );
+        return supportsDataCollection(granted) && hasAllDataPermissions(granted.data_collection);
       } catch {
         return false;
       }
@@ -150,8 +159,7 @@ export function createLocalAIPermissionManager(
         if (!supportsDataCollection(granted)) {
           throw new Error('Firefox data-consent permission inspection is unavailable.');
         }
-        const hasAnyGrant =
-          hasOrigin || granted.data_collection.includes(FIREFOX_WEBSITE_CONTENT_PERMISSION);
+        const hasAnyGrant = hasOrigin || hasAnyDataPermission(granted.data_collection);
         cleanupInspectionRequired = hasAnyGrant;
         return hasAnyGrant;
       } catch (error) {
@@ -180,11 +188,9 @@ export function createLocalAIPermissionManager(
       }
 
       const permissionSets: PermissionSet[] = [];
-      if (hasOrigin) {
-        permissionSets.push(originPermission);
-      }
-      if (dataCollection?.includes(FIREFOX_WEBSITE_CONTENT_PERMISSION)) {
-        permissionSets.push(websiteContentPermission);
+      if (hasOrigin) permissionSets.push(originPermission);
+      if (dataCollection !== undefined && hasAnyDataPermission(dataCollection)) {
+        permissionSets.push(dataCollectionPermission);
       }
 
       if (!originInspected || (firefox && dataCollection === undefined)) return false;
@@ -192,6 +198,7 @@ export function createLocalAIPermissionManager(
       if (removed) {
         acquiredByLastRequest = [];
         cleanupInspectionRequired = false;
+        enableStage = 'idle';
       }
       return removed;
     },
