@@ -19,6 +19,7 @@
     "package:build": "pnpm zip:chrome && pnpm zip:firefox",
     "package:validate": "node --experimental-strip-types scripts/validate-packages.ts",
     "test:e2e:packages": "vitest run tests/e2e/manifest-packages.test.ts",
+    "test:e2e:chromium": "pnpm build:chrome && playwright test --config playwright.config.ts",
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "svelte-check --tsconfig ./tsconfig.json",
