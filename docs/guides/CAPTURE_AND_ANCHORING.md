@@ -29,6 +29,6 @@ TraceMark deliberately refuses to guess. If the status says the quotation appear
 
 ## Recover access on a fresh tab
 
-An active source page can still lack the temporary browser permission needed for anchoring, especially when it was opened fresh. Invoke the TraceMark toolbar action or press `Alt+Shift+S` on that specific active tab, close the capture view if needed, then retry **Mark on page**. This gesture grants access only for that tab interaction; it does not give TraceMark permanent access to sites.
+An active source page can still lack the temporary browser permission needed for anchoring, especially when it was opened fresh. Invoke the TraceMark toolbar action or press `Alt+Shift+S` on that specific active tab, close the capture view if needed, then retry **Mark on page**. This gesture grants temporary access to that active page and tab; it does not give TraceMark standing access to websites.
 
 If the browser still identifies the page as protected, it cannot be highlighted. Keep the saved source information as the durable link, rather than relying on a page mark.

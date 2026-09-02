@@ -18,9 +18,9 @@ check `format` and `version` before relying on its contents.
 ```
 
 All top-level fields are required and no unrecognized top-level fields are accepted. `exportedAt`
-and record timestamps are ISO date-time strings with an offset. IDs are UUIDs. The importer accepts
-at most 10,000 collections, 100,000 highlights, and 100,000 AI results, and rejects JSON text over
-20 MB.
+and record timestamps are ISO date-time strings with an offset. Collection, highlight, and AI-result
+IDs are UUIDs; `settings.id` is the literal `settings`. The importer accepts at most 10,000
+collections, 100,000 highlights, and 100,000 AI results, and rejects JSON text over 20 MB.
 
 ## Collections
 
