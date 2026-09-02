@@ -16,7 +16,34 @@ cloud sync, or application backend.
 - [Configure optional local AI](#optional-local-ai-with-ollama)
 - [Review browser limitations](#browser-limitations)
 - [Develop and test the extension](#development)
+- [Browse the documentation map](#documentation-map)
 - [Read the privacy, permission, and architecture documents](#privacy-permissions-and-architecture)
+
+## Documentation map
+
+Start with the guide that matches what you are trying to do:
+
+| Goal                                              | Guide                                                         |
+| ------------------------------------------------- | ------------------------------------------------------------- |
+| Install TraceMark and save a first quotation      | [Getting started](docs/guides/GETTING_STARTED.md)             |
+| Capture text and mark it again on the source page | [Capture and anchoring](docs/guides/CAPTURE_AND_ANCHORING.md) |
+| Organize, search, and edit saved research         | [Library and search](docs/guides/LIBRARY_AND_SEARCH.md)       |
+| Export, validate, and restore research            | [Backup and restore](docs/guides/BACKUP_AND_RESTORE.md)       |
+| Configure the optional Ollama integration         | [Local AI](docs/guides/LOCAL_AI.md)                           |
+| Diagnose a problem                                | [Troubleshooting](docs/guides/TROUBLESHOOTING.md)             |
+
+Reference documentation explains the boundaries behind those workflows:
+
+- [Frequently asked questions](docs/FAQ.md)
+- [Accessibility notes](docs/ACCESSIBILITY.md)
+- [Data lifecycle](docs/DATA_LIFECYCLE.md)
+- [JSON backup format](docs/BACKUP_FORMAT.md)
+- [Threat model](docs/THREAT_MODEL.md)
+- [Development setup](docs/DEVELOPMENT_SETUP.md)
+- [Debugging](docs/DEBUGGING.md)
+- [Release checklist](docs/RELEASE_CHECKLIST.md)
+- [Review checklist](docs/REVIEW_CHECKLIST.md)
+- [Support routes](SUPPORT.md)
 
 ## What it does
 
