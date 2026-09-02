@@ -17,6 +17,7 @@ cloud sync, or application backend.
 - [Review browser limitations](#browser-limitations)
 - [Develop and test the extension](#development)
 - [Browse the documentation map](#documentation-map)
+- [Open the complete documentation index](docs/README.md)
 - [Read the privacy, permission, and architecture documents](#privacy-permissions-and-architecture)
 
 ## Documentation map
@@ -34,10 +35,15 @@ Start with the guide that matches what you are trying to do:
 
 Reference documentation explains the boundaries behind those workflows:
 
+- [Complete documentation index](docs/README.md)
 - [Frequently asked questions](docs/FAQ.md)
 - [Accessibility notes](docs/ACCESSIBILITY.md)
 - [Data lifecycle](docs/DATA_LIFECYCLE.md)
 - [JSON backup format](docs/BACKUP_FORMAT.md)
+- [Browser compatibility matrix](docs/reference/BROWSER_COMPATIBILITY.md)
+- [Search behavior](docs/reference/SEARCH_BEHAVIOR.md)
+- [Storage model](docs/reference/STORAGE_MODEL.md)
+- [Local AI contract](docs/reference/LOCAL_AI_CONTRACT.md)
 - [Threat model](docs/THREAT_MODEL.md)
 - [Development setup](docs/DEVELOPMENT_SETUP.md)
 - [Debugging](docs/DEBUGGING.md)
