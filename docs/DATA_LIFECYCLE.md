@@ -58,3 +58,16 @@ Browser profile deletion, extension-data clearing, browser cleanup, disk failure
 make local research unavailable. TraceMark has no automatic recovery copy. Keep JSON backups in a
 location you trust, protect them as research data, and periodically test restoration with a
 non-sensitive fixture or separate profile.
+
+## Copies outside TraceMark
+
+TraceMark cannot inventory or erase data after another component receives it. This includes JSON
+backups, Markdown exports, copied quotation text, screenshots, issue attachments, operating-system
+backups, synchronized download folders, and input or output retained by Ollama or a model. Removing
+the browser extension affects only the browser-managed extension storage associated with that
+profile and identity.
+
+Before sharing or deleting research, list the copies and recipients that matter for the task. Remove
+each external copy through the system that owns it, and verify retention rules separately. The
+[safe sharing guide](guides/SAFE_SHARING.md) and [deletion guide](guides/DELETING_DATA.md) cover the
+user-facing checks.
