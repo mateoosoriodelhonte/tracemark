@@ -75,6 +75,20 @@ gestures.
 Documentation-only commits still run `pnpm format:check` and `pnpm docs:links`. Run `pnpm check`
 before merging so a documentation change cannot accidentally bypass the repository-wide gate.
 
+## Documentation changes
+
+Check the implementation before documenting behavior, and distinguish automated evidence from
+manual browser observations. Update the narrow authoritative page, then link to it from overview
+pages instead of copying a full contract into several places.
+
+A documentation pull request should identify its audience and the behavior it clarifies. Search for
+related labels, permissions, filenames, versions, and limitations across the README, user guides,
+reference pages, store material, and issue templates. Use synthetic examples and follow the
+[documentation style guide](docs/maintainers/DOCUMENTATION_STYLE.md).
+
+Documentation-only work must not include generated packages or regenerated screenshots unless those
+assets are part of the stated change and have been visually reviewed.
+
 ## Pull requests
 
 A pull request should:
