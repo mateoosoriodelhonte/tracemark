@@ -24,14 +24,17 @@ cloud sync, or application backend.
 
 Start with the guide that matches what you are trying to do:
 
-| Goal                                              | Guide                                                         |
-| ------------------------------------------------- | ------------------------------------------------------------- |
-| Install TraceMark and save a first quotation      | [Getting started](docs/guides/GETTING_STARTED.md)             |
-| Capture text and mark it again on the source page | [Capture and anchoring](docs/guides/CAPTURE_AND_ANCHORING.md) |
-| Organize, search, and edit saved research         | [Library and search](docs/guides/LIBRARY_AND_SEARCH.md)       |
-| Export, validate, and restore research            | [Backup and restore](docs/guides/BACKUP_AND_RESTORE.md)       |
-| Configure the optional Ollama integration         | [Local AI](docs/guides/LOCAL_AI.md)                           |
-| Diagnose a problem                                | [Troubleshooting](docs/guides/TROUBLESHOOTING.md)             |
+| Goal                                              | Guide                                                                       |
+| ------------------------------------------------- | --------------------------------------------------------------------------- |
+| Install TraceMark and save a first quotation      | [Getting started](docs/guides/GETTING_STARTED.md)                           |
+| Capture text and mark it again on the source page | [Capture and anchoring](docs/guides/CAPTURE_AND_ANCHORING.md)               |
+| Organize, search, and edit saved research         | [Library and search](docs/guides/LIBRARY_AND_SEARCH.md)                     |
+| Export, validate, and restore research            | [Backup and restore](docs/guides/BACKUP_AND_RESTORE.md)                     |
+| Configure the optional Ollama integration         | [Local AI](docs/guides/LOCAL_AI.md)                                         |
+| Understand profiles and apparently missing data   | [Extension identity and profiles](docs/guides/EXTENSION_ID_AND_PROFILES.md) |
+| Delete local quotations or installation data      | [Deleting local data](docs/guides/DELETING_DATA.md)                         |
+| Resolve browser permission failures               | [Permission troubleshooting](docs/guides/PERMISSION_TROUBLESHOOTING.md)     |
+| Diagnose a problem                                | [Troubleshooting](docs/guides/TROUBLESHOOTING.md)                           |
 
 Reference documentation explains the boundaries behind those workflows:
 
