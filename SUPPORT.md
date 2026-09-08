@@ -4,6 +4,18 @@ TraceMark is a local-first browser extension. Public support reports should use 
 do not include saved quotations, private URLs, browsing history, exported backups, credentials,
 browser-profile paths, or vulnerability details.
 
+## Choose the right route
+
+| Need                          | First route                                    | Keep out of the public report               |
+| ----------------------------- | ---------------------------------------------- | ------------------------------------------- |
+| How-to or expected limitation | Documentation and existing issues              | Private research and profile details        |
+| Reproducible malfunction      | Bug-report form                                | Real backups, private URLs, and credentials |
+| Proposed capability           | Feature-request form                           | Unnecessary personal or organizational data |
+| Possible vulnerability        | Private-channel request in the security policy | Impact, payload, or reproduction details    |
+
+When uncertain whether a problem is a vulnerability, begin with the sanitized private-channel
+request rather than publishing security-sensitive evidence.
+
 ## Help using TraceMark
 
 Start with the documentation map in [README.md](README.md). The most common workflows are covered
