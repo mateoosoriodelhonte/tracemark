@@ -1,0 +1,52 @@
+name: Accessibility issue
+description: Report an accessibility barrier in a TraceMark workflow
+title: '[Accessibility]: '
+labels:
+  - accessibility
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Describe the barrier with synthetic content. Do not attach private quotations, URLs, browser-profile paths, or security-sensitive details.
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Affected surface
+      options:
+        - Capture popup
+        - Research library page
+        - Chrome side panel
+        - Firefox sidebar
+        - Browser-owned surface
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Browser, version, and operating system
+    validations:
+      required: true
+  - type: textarea
+    id: setup
+    attributes:
+      label: Input method and accessibility setup
+      description: Include keyboard, zoom/text size, contrast mode, or assistive technology when relevant.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps and observed barrier
+      description: State starting focus, action, expected behavior, and observed result.
+    validations:
+      required: true
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checks
+      options:
+        - label: I reproduced this with harmless content where possible.
+          required: true
+        - label: This report contains no private research or vulnerability details.
+          required: true
