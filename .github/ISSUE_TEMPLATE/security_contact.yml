@@ -1,0 +1,40 @@
+name: Security contact request
+description: Request a private channel for a possible vulnerability without disclosing details
+title: 'Security contact request'
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Do not describe the issue, impact, reproduction, payload, affected data, URLs, credentials, backups, or proof of concept here. This form only helps arrange a private channel.
+  - type: input
+    id: contact
+    attributes:
+      label: Safe contact method
+      description: Provide a way for a maintainer to contact you privately.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Affected TraceMark version or commit
+      description: Optional; do not include reproduction details.
+  - type: dropdown
+    id: category
+    attributes:
+      label: Broad category
+      options:
+        - Permission boundary
+        - Backup import
+        - Page injection
+        - Local AI
+        - Package or build
+        - Other
+    validations:
+      required: true
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Confirmation
+      options:
+        - label: I have not included vulnerability details or sensitive research in this public request.
+          required: true
