@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: TraceMark documentation
+    url: https://github.com/mateoosoriodelhonte/tracemark/blob/main/docs/README.md
+    about: Start with installation, recovery, privacy, and troubleshooting guides.
+  - name: Security contact request
+    url: https://github.com/mateoosoriodelhonte/tracemark/issues/new?template=security_contact.yml
+    about: Request a private channel without publishing vulnerability details.
