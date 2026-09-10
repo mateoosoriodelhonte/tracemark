@@ -55,3 +55,15 @@ browser, not TraceMark. If a gesture-driven action is difficult to invoke, the `
 command provides a keyboard capture route. TraceMark may be unavailable on protected browser pages
 regardless of input method. Report an observed accessibility issue with browser, OS, and the
 surface used (popup, library page, side panel, or sidebar), while omitting sensitive research.
+
+## Reporting an accessibility issue
+
+Include the TraceMark version, browser and version, operating system, affected surface, input method,
+zoom or text-size setting, and assistive technology when applicable. Describe the starting focus,
+exact action, expected announcement or movement, and observed result. Reproduce with synthetic text
+or the repository fixture before attaching a sanitized screenshot or recording.
+
+State whether the problem occurs in TraceMark content or browser-owned chrome such as the toolbar,
+permission prompt, side-panel frame, or sidebar frame. That distinction determines where a fix can
+be made, but it does not make the impact less important. Follow [SUPPORT.md](../SUPPORT.md) for the
+public reporting route and [SECURITY.md](../SECURITY.md) if the issue could expose private data.

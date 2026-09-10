@@ -35,3 +35,15 @@ Confirm Ollama is installed, running locally, and has the model entered in **Oll
 If permission removal is pending, choose **Retry permission removal** before enabling again, or inspect the extension’s permissions in browser settings. If a request times out, the model is unavailable, or the service cannot be reached, resolve the Ollama issue and retry; TraceMark does not silently send research when it cannot confirm the required permissions.
 
 For setup details, see [Use optional local AI with Ollama](LOCAL_AI.md).
+
+## TraceMark disappeared or opens an empty library
+
+Firefox removes temporary add-ons when the browser restarts. Reinstall the reviewed package through
+`about:debugging`, then determine whether the same profile and extension identity still own the
+expected storage. In Chrome, confirm the unpacked directory still exists and that the enabled
+TraceMark entry is the installation previously used.
+
+Do not uninstall other copies, delete a profile, or clear extension data during diagnosis. Compare
+the browser profile, extension ID, package version, and installation route first. If the original
+storage boundary is unavailable, import a verified JSON backup; Markdown exports cannot restore the
+library. See [Extension identity and browser profiles](EXTENSION_ID_AND_PROFILES.md).

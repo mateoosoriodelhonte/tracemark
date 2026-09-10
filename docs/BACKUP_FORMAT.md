@@ -69,3 +69,15 @@ Backups contain quotation text, source URLs, notes, tags, and potentially saved 
 them as sensitive research. A Markdown export is deliberately separate: it is readable and escaped
 for display, but TraceMark cannot import it. For recovery guidance, see
 [DATA_LIFECYCLE.md](DATA_LIFECYCLE.md).
+
+## Consumer validation order
+
+Software inspecting a backup should apply cheap outer bounds before deeper parsing: enforce the file
+size limit, decode UTF-8 JSON, validate the exact envelope and version, validate every record, check
+unique identifiers and normalized collection names, then verify all collection/highlight/AI-result
+relationships. No destination storage should change during these steps.
+
+After structural validation, normalize values and plan ID remapping before opening one transaction
+for the merge. Diagnostics should identify the field or record position without echoing private
+quotation, note, URL, or AI content. A consumer that does not implement these semantics should treat
+the file as opaque sensitive data rather than partially importing it.

@@ -39,6 +39,18 @@ behavior can remove extension storage, and TraceMark does not make automatic clo
 trust, and test a recovery import. A Markdown download is readable but is not an import format.
 See [DATA_LIFECYCLE.md](DATA_LIFECYCLE.md).
 
+## Why is my library empty after installing or updating TraceMark?
+
+First confirm that the browser profile and extension installation are the same ones that held the
+research. Chrome and Firefox profiles keep separate extension storage, and a second unpacked Chrome
+copy can receive a different extension identity. Firefox temporary installation also ends when the
+browser restarts.
+
+Do not remove the old profile or installation while investigating. Check the extension ID in the
+browser's management page and look for a JSON backup before importing into a new boundary. The
+[extension identity and profiles guide](guides/EXTENSION_ID_AND_PROFILES.md) provides a safe
+comparison sequence.
+
 ## What does “local AI” send, and where?
 
 Local AI is off by default. When you explicitly enable it and request an action, TraceMark sends
