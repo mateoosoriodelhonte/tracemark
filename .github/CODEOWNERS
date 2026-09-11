@@ -1,0 +1,9 @@
+# Repository-wide review owner. This file documents review routing; branch protections enforce it.
+* @mateoosoriodelhonte
+
+# High-impact paths require the same maintainer review.
+/wxt.config.ts @mateoosoriodelhonte
+/src/ @mateoosoriodelhonte
+/scripts/ @mateoosoriodelhonte
+/docs/ @mateoosoriodelhonte
+/SECURITY.md @mateoosoriodelhonte

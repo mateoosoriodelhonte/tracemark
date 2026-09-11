@@ -27,6 +27,7 @@ task. The root [README](../README.md) remains the product overview and quick sta
 - [Permission troubleshooting](guides/PERMISSION_TROUBLESHOOTING.md)
 - [Browser limitations](guides/BROWSER_LIMITATIONS.md)
 - [Troubleshooting](guides/TROUBLESHOOTING.md)
+- [Reporting problems safely](guides/REPORTING_PROBLEMS.md)
 
 ## Product and project information
 
@@ -74,10 +75,15 @@ task. The root [README](../README.md) remains the product overview and quick sta
 - [Store submission](STORE_SUBMISSION.md)
 - [Documentation style](maintainers/DOCUMENTATION_STYLE.md)
 - [Issue triage](maintainers/ISSUE_TRIAGE.md)
+- [CI triage](maintainers/CI_TRIAGE.md)
+- [Repository hygiene](maintainers/REPOSITORY_HYGIENE.md)
 - [Manual test record](maintainers/MANUAL_TEST_RECORD.md)
 - [Release evidence record](maintainers/RELEASE_EVIDENCE_RECORD.md)
+- [Store readiness review](maintainers/STORE_READINESS_REVIEW.md)
 - [Dependency updates](maintainers/DEPENDENCY_UPDATES.md)
+- [Vulnerability intake](maintainers/VULNERABILITY_INTAKE.md)
 - [Security-sensitive change review](maintainers/SECURITY_CHANGE_REVIEW.md)
+- [Community moderation](maintainers/COMMUNITY_MODERATION.md)
 - [Privacy review](maintainers/PRIVACY_REVIEW.md)
 - [Permissions review](maintainers/PERMISSIONS_REVIEW.md)
 - [Storage migrations](maintainers/STORAGE_MIGRATIONS.md)
