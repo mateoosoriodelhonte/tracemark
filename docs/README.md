@@ -48,6 +48,7 @@ task. The root [README](../README.md) remains the product overview and quick sta
 ## Architecture and reference
 
 - [Architecture](ARCHITECTURE.md)
+- [Design decision record](DECISION_RECORDS.md)
 - [Data lifecycle](DATA_LIFECYCLE.md)
 - [Permission rationale](PERMISSIONS.md)
 - [Threat model](THREAT_MODEL.md)
